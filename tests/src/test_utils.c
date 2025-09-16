@@ -81,6 +81,30 @@ static int tu_sample_indices(size_t M, size_t N, size_t* out_indices){
     return 0;
 }
 
+static int tu_du_inner(const char* path, uint64_t* total){
+    struct stat st;
+    if (lstat(path, &st) != 0) return (errno==ENOENT) ? 0 : -1;
+
+    if (S_ISREG(st.st_mode) || S_ISLNK(st.st_mode)) {
+        *total += (uint64_t)st.st_size;
+        return 0;
+    }
+    if (!S_ISDIR(st.st_mode)) return 0;
+
+    DIR* d = opendir(path);
+    if (!d) return -1;
+
+    struct dirent* e;
+    while ((e = readdir(d))){
+        if (!strcmp(e->d_name,".") || !strcmp(e->d_name,"..")) continue;
+        char p[PATH_MAX];
+        snprintf(p, sizeof p, "%s/%s", path, e->d_name);
+        if (tu_du_inner(p, total) != 0){ closedir(d); return -1; }
+    }
+    closedir(d);
+    return 0;
+}
+
 char* tu_generate_email_list_seq(size_t n, const char* prefix, const char* domain){
     if (!domain) domain = "@example.com";
     if (!prefix) prefix = "user_";
@@ -187,6 +211,7 @@ void tu_teardown_store(Ctx* c){
     tu_rm_rf(c->root);
 }
 
+
 /* ========================================================================== */
 /*                                I/O control                                 */
 /* ========================================================================== */
@@ -217,6 +242,13 @@ int tu_io_set_files(const char* out_path, const char* err_path){
         g_err = g_err_owned;
     }
     return 0;
+}
+
+uint64_t tu_dir_size_bytes(const char* path)
+{
+    uint64_t tot = 0;
+    (void)tu_du_inner(path, &tot);
+    return tot;
 }
 
 void tu_out(const char* fmt, ...){
