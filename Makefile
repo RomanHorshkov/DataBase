@@ -105,4 +105,4 @@ test: $(BIN_DIR)/db_tests
 	./$(BIN_DIR)/db_tests $(RUNARGS)
 
 clean:
-	@rm -rf build && rm -rf med/ && rm blob_*
+	@rm -rf build && rm -rf med/ && rm -f blob_*

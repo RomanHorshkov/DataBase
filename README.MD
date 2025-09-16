@@ -7,7 +7,7 @@ Implements users, roles, metadata, and access control with predictable performan
 
 ---
 
-## ✨ Features
+## Features
 
 * **Embedded database**: no separate server; links directly against `liblmdb`.
 * **Content-addressed storage**: deduplicates blobs by SHA-256 hash.
@@ -22,7 +22,7 @@ Implements users, roles, metadata, and access control with predictable performan
 
 ---
 
-## 📂 Project Layout
+## Project Layout
 
 ```
 include/
@@ -45,7 +45,7 @@ README.md
 
 ---
 
-## 🗄️ Database Model
+## Database Model
 
 All state lives under a **root directory**:
 
@@ -96,7 +96,7 @@ typedef struct __attribute__((packed)) {
 
 ---
 
-## 🔑 Access Control (Presence-only ACL)
+## Access Control (Presence-only ACL)
 
 * **Relation types (`rtype`)**
 
@@ -132,7 +132,7 @@ typedef struct __attribute__((packed)) {
 
 ---
 
-## 🚀 Build & Run
+## Build & Run
 
 ### Install dependencies
 
@@ -155,7 +155,7 @@ make build/bin/db_tests     # test runner
 
 ---
 
-## 🧪 Tests
+## Tests
 
 The test runner has its own CLI:
 
@@ -183,7 +183,7 @@ make test-repeat N=5
 
 ---
 
-## 🛠️ Public API (Highlights)
+## Public API (Highlights)
 
 From `db_store.h`:
 
@@ -210,7 +210,7 @@ From `db_store.h`:
 
 ---
 
-## ⚡ Notes
+## Notes
 
 * LMDB environments live under `<root>/meta/`.
 * Blob objects are written to `<root>/objects/sha256/` using two-level sharding.
@@ -219,6 +219,5 @@ From `db_store.h`:
 
 ---
 
-## 📜 License
+## License
 
-MIT (or your choice).
