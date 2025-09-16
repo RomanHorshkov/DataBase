@@ -1,0 +1,60 @@
+name: CI
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs (keeps things snappy)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-gcc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install deps (fast)
+        env: { DEBIAN_FRONTEND: noninteractive }
+        run: |
+          sudo apt-get -yqq update
+          sudo apt-get -yqq install build-essential liblmdb-dev libssl-dev pkg-config
+
+      - name: Build
+        run: |
+          make clean
+          make -j
+
+      - name: Run tests
+        shell: bash
+        run: |
+          set -o pipefail
+          make test 2>&1 | tee test.log
+          status=${PIPESTATUS[0]}
+
+          # Pretty summary
+          echo "## Results" >> $GITHUB_STEP_SUMMARY
+          if grep -qE "All [0-9]+ test\(s\) passed" test.log; then
+            passed=$(grep -oE "All [0-9]+ test\(s\) passed" test.log | tail -n1)
+            echo "✅ $passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Some tests failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Tail of log" >> $GITHUB_STEP_SUMMARY
+            tail -n 30 test.log >> $GITHUB_STEP_SUMMARY
+          fi
+
+          exit $status
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log
+          path: test.log

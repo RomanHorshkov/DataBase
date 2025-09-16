@@ -1,3 +1,5 @@
+![CI](https://github.com/RomanHorshkov/DataBase/actions/workflows/ci.yml/badge.svg)
+
 # LMDB Presence Store
 
 Content-addressed blob store with **presence-only ACLs** built on top of [LMDB](https://symas.com/lmdb/).
