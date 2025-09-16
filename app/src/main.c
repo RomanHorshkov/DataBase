@@ -7,28 +7,40 @@
 #include "db_store.h"
 
 /* tiny helper to write a small blob to a temp file */
-static int make_blob(const char* path, const char* tag) {
-    int fd = open(path, O_CREAT|O_RDWR|O_TRUNC, 0640);
-    if (fd < 0) return -1;
-    const unsigned char head[] = { 'D','I','C','M', 0x00, 0x01 };
-    if (write(fd, head, sizeof head) != (ssize_t)sizeof head) { close(fd); return -1; }
-    if (write(fd, tag, strlen(tag)) != (ssize_t)strlen(tag))  { close(fd); return -1; }
+static int make_blob(const char* path, const char* tag)
+{
+    int fd = open(path, O_CREAT | O_RDWR | O_TRUNC, 0640);
+    if(fd < 0)
+        return -1;
+    const unsigned char head[] = {'D', 'I', 'C', 'M', 0x00, 0x01};
+    if(write(fd, head, sizeof head) != (ssize_t)sizeof head)
+    {
+        close(fd);
+        return -1;
+    }
+    if(write(fd, tag, strlen(tag)) != (ssize_t)strlen(tag))
+    {
+        close(fd);
+        return -1;
+    }
     lseek(fd, 0, SEEK_SET);
     return fd;
 }
 
-static void print_id(const char* label, uint8_t id[DB_ID_SIZE]) {
+static void print_id(const char* label, uint8_t id[DB_ID_SIZE])
+{
     printf("%s: ", label);
-    for (int i=0;i<DB_ID_SIZE;i++) printf("%02x", id[i]);
+    for(int i = 0; i < DB_ID_SIZE; i++)
+        printf("%02x", id[i]);
     puts("");
 }
 
 static void db_print_users(void)
 {
-    size_t num_users = 32;
-    uint8_t users_of_interest[16*num_users];
+    size_t  num_users = 32;
+    uint8_t users_of_interest[16 * num_users];
     db_user_list_all(users_of_interest, &num_users);
-    for (size_t i = 0; i < num_users; i++)
+    for(size_t i = 0; i < num_users; i++)
     {
         print_id("User:", users_of_interest + i * DB_ID_SIZE);
     }
@@ -36,10 +48,10 @@ static void db_print_users(void)
 
 static void db_print_publishers(void)
 {
-    size_t num_users = 32;
-    uint8_t users_of_interest[16*num_users];
+    size_t  num_users = 32;
+    uint8_t users_of_interest[16 * num_users];
     db_user_list_publishers(users_of_interest, &num_users);
-    for (size_t i = 0; i < num_users; i++)
+    for(size_t i = 0; i < num_users; i++)
     {
         print_id("Publisher:", users_of_interest + i * DB_ID_SIZE);
     }
@@ -47,10 +59,10 @@ static void db_print_publishers(void)
 
 static void db_print_viewers(void)
 {
-    size_t num_users = 32;
-    uint8_t users_of_interest[16*num_users];
+    size_t  num_users = 32;
+    uint8_t users_of_interest[16 * num_users];
     db_user_list_viewers(users_of_interest, &num_users);
-    for (size_t i = 0; i < num_users; i++)
+    for(size_t i = 0; i < num_users; i++)
     {
         print_id("Viewer:", users_of_interest + i * DB_ID_SIZE);
     }
@@ -61,21 +73,25 @@ int main(void)
     puts("=== DB smoke tests ===");
 
     /* open DB */
-    if (db_open("./med", 1ULL<<30) != 0) { puts("db_open failed"); return 1; }
+    if(db_open("./med", 1ULL << 30) != 0)
+    {
+        puts("db_open failed");
+        return 1;
+    }
 
     /* create three blobs on disk */
-    int fd_shared = make_blob("./blob_shared.dcm", "shared-seed-001");
-    int fd_A      = make_blob("./blob_A.dcm",      "unique-A");
-    int fd_B      = make_blob("./blob_B.dcm",      "unique-B");
+    int     fd_shared            = make_blob("./blob_shared.dcm", "shared-seed-001");
+    int     fd_A                 = make_blob("./blob_A.dcm", "unique-A");
+    int     fd_B                 = make_blob("./blob_B.dcm", "unique-B");
 
     /* 2) seed users */
-    char alice[EMAIL_MAX_LEN] = "alice@example.com";
-    char bob  [EMAIL_MAX_LEN] = "bob@example.com";
-    char carol[EMAIL_MAX_LEN] = "carol@example.com";
+    char    alice[EMAIL_MAX_LEN] = "alice@example.com";
+    char    bob[EMAIL_MAX_LEN]   = "bob@example.com";
+    char    carol[EMAIL_MAX_LEN] = "carol@example.com";
     uint8_t UA[DB_ID_SIZE] = {0}, UB[DB_ID_SIZE] = {0}, UC[DB_ID_SIZE] = {0};
 
     db_add_user(alice, UA);
-    db_add_user(bob,   UB);
+    db_add_user(bob, UB);
     db_add_user(carol, UC);
 
     print_id("Alice", UA);
@@ -118,7 +134,6 @@ int main(void)
     db_print_publishers();
     db_print_viewers();
     printf("\n\n");
-    
 
     // db_user_set_role_publisher(UB);
     // db_upload_data_from_fd(UB, fd_shared, "application/dicom", D_shared);
@@ -138,7 +153,6 @@ int main(void)
     db_print_publishers();
     db_print_viewers();
     printf("\n\n");
-
 
     /* 5) share D_shared with Bob by email (defaults to VIEW|DOWNLOAD) */
     // db_share_data_with_user_email(D_shared, bob);
@@ -176,7 +190,9 @@ int main(void)
     // cnt >= 1);
 
     /* 11) cleanup */
-    close(fd_shared); close(fd_A); close(fd_B);
+    close(fd_shared);
+    close(fd_A);
+    close(fd_B);
     db_close();
     puts("All tests passed.");
     return 0;

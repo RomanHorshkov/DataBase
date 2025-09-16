@@ -106,3 +106,25 @@ test: $(BIN_DIR)/db_tests
 
 clean:
 	@rm -rf build && rm -rf med/ && rm -f blob_*
+
+
+# --- Code formatting (clang-format only) ------------------------------------
+CLANG_FORMAT := $(shell command -v clang-format 2>/dev/null)
+
+# File set (prefer git to avoid vendor/build; fallback to find)
+FMT_FILES := $(shell \
+  git ls-files '*.c' '*.h' 2>/dev/null || \
+  find . -type f \( -name '*.c' -o -name '*.h' \) \
+      -not -path './build/*' -not -path './.git/*' \
+)
+
+.PHONY: format
+
+format:
+ifndef CLANG_FORMAT
+	@echo "[fmt] clang-format not found. Install it (e.g., sudo apt-get install -y clang-format)"; false
+else
+	@test -f .clang-format 
+	@$(CLANG_FORMAT) -i $(FMT_FILES)
+endif
+
