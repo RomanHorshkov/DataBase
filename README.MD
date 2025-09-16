@@ -124,7 +124,7 @@ typedef struct __attribute__((packed)) {
 
 ---
 
-## 👥 User Roles
+## User Roles
 
 * **Viewer**: can view (`U`) and reshare (`S`) data shared with them.
 * **Publisher**: viewer rights + can upload new data + delete own data.
