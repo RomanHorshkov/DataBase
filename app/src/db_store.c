@@ -670,7 +670,8 @@ int db_owner_delete_data(const uint8_t actor[DB_ID_SIZE], const uint8_t data_id[
         if (rc != 0)       { mdb_txn_abort(txn); return rc; }
     }
 
-    /* For each rtype, repeatedly position on (data|rtype), delete one dup at a time */
+    /* For each rtype, repeatedly position on (data|rtype), delete one dup at a time,
+    i.e. dereference the relationships between users and this data */
     const char rtypes[3] = { ACL_RTYPE_OWNER, ACL_RTYPE_SHARE, ACL_RTYPE_USER };
     for (size_t i = 0; i < 3; ++i)
     {

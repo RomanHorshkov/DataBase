@@ -4,6 +4,7 @@
         "typeinfo": "c",
         "stdio.h": "c",
         "stdint.h": "c",
-        "uuid.h": "c"
+        "uuid.h": "c",
+        "string.h": "c"
     }
 }
