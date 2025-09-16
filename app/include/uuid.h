@@ -2,7 +2,7 @@
 #define UUID_H
 #include <stdint.h>
 
-/* UUID (v4) 16 bytes */
+/* UUID bytes sizes 128 bits */
 #define DB_ID_SIZE 16
 
 /**

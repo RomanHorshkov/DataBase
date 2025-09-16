@@ -127,16 +127,16 @@ int t_upload_requires_publisher(void)
     db_add_user(ea, A);
 
     /* A new user cannot upload*/
-    EXPECT_EQ_RC(db_upload_data_from_fd(A, fd, "application/dicom", D), -EPERM);
+    EXPECT_EQ_RC(db_add_data_from_fd(A, fd, "application/dicom", D), -EPERM);
 
     /* Viewer cannot upload */
     EXPECT_EQ_RC(db_user_set_role_viewer(A), 0);
-    EXPECT_EQ_RC(db_upload_data_from_fd(A, fd, "application/dicom", D), -EPERM);
+    EXPECT_EQ_RC(db_add_data_from_fd(A, fd, "application/dicom", D), -EPERM);
 
     /* Publisher can upload */
     EXPECT_EQ_RC(db_user_set_role_publisher(A), 0);
     lseek(fd, 0, SEEK_SET);
-    EXPECT_EQ_RC(db_upload_data_from_fd(A, fd, "application/dicom", D), 0);
+    EXPECT_EQ_RC(db_add_data_from_fd(A, fd, "application/dicom", D), 0);
 
     close(fd);
     unlink("./.tmp_blob.dcm");
@@ -161,11 +161,11 @@ int t_dedup_same_sha(void)
     int fd = tu_make_blob("./.tmp_blob2.dcm", "same-content");
     EXPECT_TRUE(fd >= 0);
     uint8_t D1[DB_ID_SIZE] = {0}, D2[DB_ID_SIZE] = {0};
-    int     rc = db_upload_data_from_fd(A, fd, "application/dicom", D1);
+    int     rc = db_add_data_from_fd(A, fd, "application/dicom", D1);
     EXPECT_EQ_RC(rc, 0);
 
     lseek(fd, 0, SEEK_SET);
-    rc = db_upload_data_from_fd(A, fd, "application/dicom", D2);
+    rc = db_add_data_from_fd(A, fd, "application/dicom", D2);
     EXPECT_EQ_RC(rc, -EEXIST);
     EXPECT_EQ_ID(D1, D2);
 
@@ -195,7 +195,7 @@ int t_share_by_email(void)
     int fd = tu_make_blob("./.tmp_blob3.dcm", "to-share");
     EXPECT_TRUE(fd >= 0);
     uint8_t D[DB_ID_SIZE] = {0};
-    EXPECT_EQ_RC(db_upload_data_from_fd(A, fd, "application/dicom", D), 0);
+    EXPECT_EQ_RC(db_add_data_from_fd(A, fd, "application/dicom", D), 0);
 
     /* share D with bob via email */
     EXPECT_EQ_RC(db_user_share_data_with_user_email(A, D, e_bob), 0);
@@ -223,7 +223,7 @@ int t_resolve_path_points_to_object(void)
     int fd = tu_make_blob("./.tmp_blob4.dcm", "path-check");
     EXPECT_TRUE(fd >= 0);
     uint8_t D[DB_ID_SIZE] = {0};
-    EXPECT_EQ_RC(db_upload_data_from_fd(A, fd, "application/dicom", D), 0);
+    EXPECT_EQ_RC(db_add_data_from_fd(A, fd, "application/dicom", D), 0);
 
     char path[PATH_MAX];
     EXPECT_EQ_RC(db_resolve_data_path(D, path, sizeof path), 0);
@@ -265,7 +265,7 @@ int t_share_requires_relationship(void)
     int fd = tu_make_blob("./.tmp_blob5.dcm", "owned-by-B");
     EXPECT_TRUE(fd >= 0);
     uint8_t D[DB_ID_SIZE] = {0};
-    EXPECT_EQ_RC(db_upload_data_from_fd(B, fd, "application/dicom", D), 0);
+    EXPECT_EQ_RC(db_add_data_from_fd(B, fd, "application/dicom", D), 0);
 
     /* A tries to share B's data to C -> should fail (-EPERM, no presence on D) */
     EXPECT_EQ_RC(db_user_share_data_with_user_email(A, D, ec), -EPERM);
@@ -307,7 +307,7 @@ int t_owner_delete_cascade(void)
     int fd = tu_make_blob("./.tmp_blob6.dcm", "delete-me");
     EXPECT_TRUE(fd >= 0);
     uint8_t D[DB_ID_SIZE] = {0};
-    EXPECT_EQ_RC(db_upload_data_from_fd(O, fd, "application/dicom", D), 0);
+    EXPECT_EQ_RC(db_add_data_from_fd(O, fd, "application/dicom", D), 0);
 
     /* share to both */
     EXPECT_EQ_RC(db_user_share_data_with_user_email(O, D, eu1), 0);
@@ -363,11 +363,11 @@ int t_dedup_multi_owner_can_delete(void)
     uint8_t D1[DB_ID_SIZE] = {0}, D2[DB_ID_SIZE] = {0};
 
     /* First upload by A creates the object */
-    EXPECT_EQ_RC(db_upload_data_from_fd(A, fd, "application/dicom", D1), 0);
+    EXPECT_EQ_RC(db_add_data_from_fd(A, fd, "application/dicom", D1), 0);
 
     /* Second upload by B dedups, returns same id and grants B 'O' presence */
     lseek(fd, 0, SEEK_SET);
-    int rc = db_upload_data_from_fd(B, fd, "application/dicom", D2);
+    int rc = db_add_data_from_fd(B, fd, "application/dicom", D2);
     EXPECT_EQ_RC(rc, -EEXIST);
     EXPECT_EQ_ID(D1, D2);
 

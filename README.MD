@@ -200,7 +200,7 @@ From `db_store.h`:
 
 ### Data
 
-* `db_upload_data_from_fd(owner_id, fd, mime, out_data_id)`
+* `db_add_data_from_fd(owner_id, fd, mime, out_data_id)`
 * `db_resolve_data_path(data_id, out_path, out_sz)`
 * `db_owner_delete_data(owner_id, data_id)`
 

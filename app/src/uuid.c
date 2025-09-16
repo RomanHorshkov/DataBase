@@ -6,7 +6,7 @@
 #include <time.h>
 #if defined(__linux__)
 /* try getrandom first (non-blocking semantics with urandom pool after init)*/
-#include <sys/random.h>
+#    include <sys/random.h>
 #endif
 static int fill_random(void* p, size_t n)
 {

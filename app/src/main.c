@@ -85,13 +85,13 @@ int main(void)
     int     fd_B      = make_blob("./blob_B.dcm", "unique-B");
 
     /* 2) seed users */
-    char    alice[EMAIL_MAX_LEN] = "alice@example.com";
-    char    bob[EMAIL_MAX_LEN]   = "bob@example.com";
-    char    carol[EMAIL_MAX_LEN] = "carol@example.com";
-    char    anton[EMAIL_MAX_LEN] = "anton@example.com";
-    char    luana[EMAIL_MAX_LEN] = "luana@example.com";
-    char    roman[EMAIL_MAX_LEN] = "roman@example.com";
-    char    luca[EMAIL_MAX_LEN] = "luca@example.com";
+    char    alice[EMAIL_MAX_LEN]  = "alice@example.com";
+    char    bob[EMAIL_MAX_LEN]    = "bob@example.com";
+    char    carol[EMAIL_MAX_LEN]  = "carol@example.com";
+    char    anton[EMAIL_MAX_LEN]  = "anton@example.com";
+    char    luana[EMAIL_MAX_LEN]  = "luana@example.com";
+    char    roman[EMAIL_MAX_LEN]  = "roman@example.com";
+    char    luca[EMAIL_MAX_LEN]   = "luca@example.com";
     char    franco[EMAIL_MAX_LEN] = "franco@example.com";
     uint8_t UA[DB_ID_SIZE] = {0}, UB[DB_ID_SIZE] = {0}, UC[DB_ID_SIZE] = {0},
             UD[DB_ID_SIZE] = {0}, UE[DB_ID_SIZE] = {0}, UF[DB_ID_SIZE] = {0},
@@ -124,9 +124,9 @@ int main(void)
     puts("=== Alice uploads ===");
     uint8_t D_shared[DB_ID_SIZE] = {0}, D_A[DB_ID_SIZE] = {0},
             D_B[DB_ID_SIZE] = {0};
-    db_upload_data_from_fd(UA, fd_shared, "application/dicom", D_shared);
-    // db_upload_data_from_fd(UA, fd_A,      "application/dicom", D_A);
-    // db_upload_data_from_fd(UA, fd_B,      "application/dicom", D_B);
+    db_add_data_from_fd(UA, fd_shared, "application/dicom", D_shared);
+    // db_add_data_from_fd(UA, fd_A,      "application/dicom", D_A);
+    // db_add_data_from_fd(UA, fd_B,      "application/dicom", D_B);
 
     print_id("D_shared", D_shared);
     print_id("D_A     ", D_A);
@@ -134,7 +134,7 @@ int main(void)
 
     puts("=== Alice set viewer ===");
     db_user_set_role_viewer(UA);
-    db_upload_data_from_fd(UA, fd_shared, "application/dicom", D_shared);
+    db_add_data_from_fd(UA, fd_shared, "application/dicom", D_shared);
     print_id("D_shared", D_shared);
     // print_id("D_A     ", D_A);
     // print_id("D_B     ", D_B);
@@ -144,7 +144,7 @@ int main(void)
 
     puts("=== Alice set publisher ===");
     db_user_set_role_publisher(UA);
-    db_upload_data_from_fd(UA, fd_shared, "application/dicom", D_shared);
+    db_add_data_from_fd(UA, fd_shared, "application/dicom", D_shared);
     print_id("D_shared", D_shared);
     // print_id("D_A     ", D_A);
     // print_id("D_B     ", D_B);
@@ -154,8 +154,8 @@ int main(void)
     printf("\n\n");
 
     // db_user_set_role_publisher(UB);
-    // db_upload_data_from_fd(UB, fd_shared, "application/dicom", D_shared);
-    // db_upload_data_from_fd(UB, fd_B,      "application/dicom", D_B);
+    // db_add_data_from_fd(UB, fd_shared, "application/dicom", D_shared);
+    // db_add_data_from_fd(UB, fd_B,      "application/dicom", D_B);
 
     db_print_publishers();
     db_print_viewers();
@@ -189,7 +189,7 @@ int main(void)
     /* 8) dedup test: re-upload the same shared content and ensure same data_id */
     // lseek(fd_shared, 0, SEEK_SET);
     // Id128 D_shared_again={0};
-    // db_upload_data_from_fd(UA, fd_shared, "application/dicom", &D_shared_again);
+    // db_add_data_from_fd(UA, fd_shared, "application/dicom", &D_shared_again);
     // print_id("D_shared_again", D_shared_again);
     /* must match */
     // memcmp(D_shared_again.b, D_shared.b, 16);

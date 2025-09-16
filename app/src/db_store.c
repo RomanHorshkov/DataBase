@@ -43,14 +43,9 @@ typedef uint16_t user_role_t;
 
 typedef struct __attribute__((packed))
 {
-    /* 16 bytes user id */
-    uint8_t     id[DB_ID_SIZE];
-
-    /* zero-terminated email */
-    char        email[EMAIL_MAX_LEN];
-
-    /* role uint16_t */
-    user_role_t role;
+    uint8_t     id[DB_ID_SIZE];       /* 16 bytes user id */
+    char        email[EMAIL_MAX_LEN]; /* 128 bytes zero-terminated email */
+    user_role_t role;                 /* 2 bytes role */
 } UserPacked;
 
 typedef struct __attribute__((packed))
@@ -470,21 +465,19 @@ int db_add_user(const char email[EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
         uuid_v7(id);
     } while(db_user_find_by_id(id, NULL) == 0);
 
-    /* Prepare packed user */
-    UserPacked up = {0};
-    up.role       = USER_ROLE_NONE;
-    memcpy(up.id, id, DB_ID_SIZE);
-    snprintf(up.email, sizeof up.email, "%.*s", EMAIL_MAX_LEN - 1, email);
-
     /* Insert in a RW transaction */
     MDB_txn *txn = NULL;
     if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS)
         return -EIO;
 
     /* id -> user */
-    MDB_val k_id = {.mv_size = DB_ID_SIZE, .mv_data = (void *)id};
-    MDB_val v_up = {.mv_size = sizeof(UserPacked), .mv_data = (void *)&up};
-    int     mrc  = mdb_put(txn, DB->db_user, &k_id, &v_up, MDB_NOOVERWRITE);
+    MDB_val  k_id              = {.mv_size = DB_ID_SIZE, .mv_data = (void *)id};
+    MDB_val  v_up              = {.mv_size = sizeof(UserPacked),
+                                  .mv_data = NULL /*(void *)&up*/};
+
+    /* Only use MDB_APPEND if keys are monotonic (e.g., UUIDv7). */
+    unsigned db_user_put_flags = MDB_NOOVERWRITE | MDB_RESERVE | MDB_APPEND;
+    int      mrc = mdb_put(txn, DB->db_user, &k_id, &v_up, db_user_put_flags);
     if(mrc == MDB_KEYEXIST)
     {
         mdb_txn_abort(txn);
@@ -497,11 +490,30 @@ int db_add_user(const char email[EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
         mdb_txn_abort(txn);
         return -EIO;
     }
+    /* Fill the reserved page memory directly — no temp buffer */
+    uint8_t *w = (uint8_t *)v_up.mv_data;
+
+    /* id[16] */
+    memcpy(w, id, DB_ID_SIZE);
+    w           += DB_ID_SIZE;
+
+    /* email[128] zero-terminated + padded */
+    size_t elen  = strnlen(email, EMAIL_MAX_LEN - 1);
+    memcpy(w, email, elen);
+    memset(w + elen, 0, EMAIL_MAX_LEN - elen); /* pad with zeros */
+    w                += EMAIL_MAX_LEN;
+
+    /* role (2 bytes); use memcpy to avoid alignment/endianness pitfalls */
+    user_role_t role  = USER_ROLE_NONE;
+    memcpy(w, &role, sizeof role);
 
     /* email -> id */
-    MDB_val k_email = {.mv_size = strlen(email), .mv_data = (void *)email};
-    MDB_val v_id    = {.mv_size = DB_ID_SIZE, .mv_data = (void *)id};
-    mrc = mdb_put(txn, DB->db_user_email2id, &k_email, &v_id, MDB_NOOVERWRITE);
+    MDB_val  k_email = {.mv_size = strnlen(email, EMAIL_MAX_LEN - 1),
+                        .mv_data = (void *)email};
+    MDB_val  v_id    = {.mv_size = DB_ID_SIZE, .mv_data = NULL /*(void *)id*/};
+    unsigned db_email_put_flags = MDB_NOOVERWRITE | MDB_RESERVE;
+    mrc =
+        mdb_put(txn, DB->db_user_email2id, &k_email, &v_id, db_email_put_flags);
     if(mrc == MDB_KEYEXIST)
     {
         mdb_txn_abort(txn);
@@ -514,6 +526,10 @@ int db_add_user(const char email[EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
         mdb_txn_abort(txn);
         return -EIO;
     }
+    
+    /* Fill the reserved page memory directly — no temp buffer */
+    /* id[16] */
+    memcpy(v_id.mv_data, id, DB_ID_SIZE);
 
     if(mdb_txn_commit(txn) != MDB_SUCCESS)
     {
@@ -523,6 +539,112 @@ int db_add_user(const char email[EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
     if(out_id)
         memcpy(out_id, id, DB_ID_SIZE);
     return 0;
+}
+
+int db_add_data_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd, const char *mime,
+                        uint8_t out_data_id[DB_ID_SIZE])
+{
+    if(!owner || src_fd < 0)
+        return -EINVAL;
+
+    user_role_t owner_role;
+
+    /* Permission check: owner must exist and be a publisher */
+    {
+        int prc = db_user_get_role(owner, &owner_role);
+        if(prc == -ENOENT)
+            return -ENOENT;
+        if(prc != 0)
+            return -EIO;
+        if(owner_role != USER_ROLE_PUBLISHER)
+            return -EPERM;
+    }
+
+    /* One-pass ingest: stream → temp → fsync → atomic publish; compute digest+size */
+    Sha256 digest;
+    size_t total = 0;
+    if(crypt_store_sha256_object_from_fd(DB->root, src_fd, &digest, &total) !=
+       0)
+        return -EIO;
+
+    /* Upsert sha2data and data_meta in a single transaction */
+    uint8_t  data_id[DB_ID_SIZE];
+    MDB_txn *txn;
+    if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS)
+        return -EIO;
+
+    MDB_val sk  = {.mv_size = 32, .mv_data = (void *)digest.b};
+    MDB_val sv  = {0};
+    int     mrc = mdb_get(txn, DB->db_sha2data, &sk, &sv);
+
+    /* Dedup hit: reuse existing id, grant owner presence, and return -EEXIST */
+    if(mrc == MDB_SUCCESS && sv.mv_size == DB_ID_SIZE)
+    {
+        memcpy(data_id, sv.mv_data, DB_ID_SIZE);
+        if(acl_grant_txn(txn, owner, ACL_RTYPE_OWNER, data_id) != 0)
+        {
+            mdb_txn_abort(txn);
+            return -EIO;
+        }
+        if(mdb_txn_commit(txn) != MDB_SUCCESS)
+        {
+            mdb_txn_abort(txn);
+            return -EIO;
+        }
+        if(out_data_id)
+            memcpy(out_data_id, data_id, DB_ID_SIZE);
+        return -EEXIST;
+    }
+    /* New object: assign id and write meta + sha2data */
+    else if(mrc == MDB_NOTFOUND)
+    {
+        uuid_v7(data_id);
+
+        DataMeta mp;
+        memset(&mp, 0, sizeof mp);
+        mp.ver = 1;
+        memcpy(mp.sha, digest.b, 32);
+        snprintf(mp.mime, sizeof mp.mime, "%s",
+                 (mime && *mime) ? mime : "application/octet-stream");
+        mp.size       = (uint64_t)total;
+        mp.created_at = now_secs();
+        memcpy(mp.owner, owner, DB_ID_SIZE);
+
+        MDB_val mk  = {.mv_size = DB_ID_SIZE, .mv_data = (void *)data_id};
+        MDB_val mv  = {.mv_size = sizeof(DataMeta), .mv_data = (void *)&mp};
+        MDB_val siv = {.mv_size = DB_ID_SIZE, .mv_data = (void *)data_id};
+
+        if(mdb_put(txn, DB->db_data_meta, &mk, &mv, 0) != MDB_SUCCESS)
+        {
+            mdb_txn_abort(txn);
+            return -EIO;
+        }
+        if(mdb_put(txn, DB->db_sha2data, &sk, &siv, 0) != MDB_SUCCESS)
+        {
+            mdb_txn_abort(txn);
+            return -EIO;
+        }
+        if(acl_grant_txn(txn, owner, ACL_RTYPE_OWNER, data_id) != 0)
+        {
+            mdb_txn_abort(txn);
+            return -EIO;
+        }
+
+        if(mdb_txn_commit(txn) != MDB_SUCCESS)
+        {
+            mdb_txn_abort(txn);
+            return -EIO;
+        }
+        if(out_data_id)
+            memcpy(out_data_id, data_id, DB_ID_SIZE);
+        return 0;
+    }
+    else
+    {
+        /* Unexpected LMDB error */
+        mdb_txn_abort(txn);
+        return -EIO;
+    }
 }
 
 /** Look up a user by id and optionally return email. */
@@ -654,113 +776,6 @@ int db_user_share_data_with_user_email(uint8_t    owner[DB_ID_SIZE],
         return -EIO;
     }
     return 0;
-}
-
-/** Ingest a blob, deduplicate by SHA-256, grant owner presence. */
-int db_upload_data_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd,
-                           const char *mime, uint8_t out_data_id[DB_ID_SIZE])
-{
-    if(!owner || src_fd < 0)
-        return -EINVAL;
-
-    user_role_t owner_role;
-
-    /* Permission check: owner must exist and be a publisher */
-    {
-        int prc = db_user_get_role(owner, &owner_role);
-        if(prc == -ENOENT)
-            return -ENOENT;
-        if(prc != 0)
-            return -EIO;
-        if(owner_role != USER_ROLE_PUBLISHER)
-            return -EPERM;
-    }
-
-    /* One-pass ingest: stream → temp → fsync → atomic publish; compute digest+size */
-    Sha256 digest;
-    size_t total = 0;
-    if(crypt_store_sha256_object_from_fd(DB->root, src_fd, &digest, &total) !=
-       0)
-        return -EIO;
-
-    /* Upsert sha2data and data_meta in a single transaction */
-    uint8_t  data_id[DB_ID_SIZE];
-    MDB_txn *txn;
-    if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS)
-        return -EIO;
-
-    MDB_val sk  = {.mv_size = 32, .mv_data = (void *)digest.b};
-    MDB_val sv  = {0};
-    int     mrc = mdb_get(txn, DB->db_sha2data, &sk, &sv);
-
-    /* Dedup hit: reuse existing id, grant owner presence, and return -EEXIST */
-    if(mrc == MDB_SUCCESS && sv.mv_size == DB_ID_SIZE)
-    {
-        memcpy(data_id, sv.mv_data, DB_ID_SIZE);
-        if(acl_grant_txn(txn, owner, ACL_RTYPE_OWNER, data_id) != 0)
-        {
-            mdb_txn_abort(txn);
-            return -EIO;
-        }
-        if(mdb_txn_commit(txn) != MDB_SUCCESS)
-        {
-            mdb_txn_abort(txn);
-            return -EIO;
-        }
-        if(out_data_id)
-            memcpy(out_data_id, data_id, DB_ID_SIZE);
-        return -EEXIST;
-    }
-    /* New object: assign id and write meta + sha2data */
-    else if(mrc == MDB_NOTFOUND)
-    {
-        uuid_v7(data_id);
-
-        DataMeta mp;
-        memset(&mp, 0, sizeof mp);
-        mp.ver = 1;
-        memcpy(mp.sha, digest.b, 32);
-        snprintf(mp.mime, sizeof mp.mime, "%s",
-                 (mime && *mime) ? mime : "application/octet-stream");
-        mp.size       = (uint64_t)total;
-        mp.created_at = now_secs();
-        memcpy(mp.owner, owner, DB_ID_SIZE);
-
-        MDB_val mk  = {.mv_size = DB_ID_SIZE, .mv_data = (void *)data_id};
-        MDB_val mv  = {.mv_size = sizeof(DataMeta), .mv_data = (void *)&mp};
-        MDB_val siv = {.mv_size = DB_ID_SIZE, .mv_data = (void *)data_id};
-
-        if(mdb_put(txn, DB->db_data_meta, &mk, &mv, 0) != MDB_SUCCESS)
-        {
-            mdb_txn_abort(txn);
-            return -EIO;
-        }
-        if(mdb_put(txn, DB->db_sha2data, &sk, &siv, 0) != MDB_SUCCESS)
-        {
-            mdb_txn_abort(txn);
-            return -EIO;
-        }
-        if(acl_grant_txn(txn, owner, ACL_RTYPE_OWNER, data_id) != 0)
-        {
-            mdb_txn_abort(txn);
-            return -EIO;
-        }
-
-        if(mdb_txn_commit(txn) != MDB_SUCCESS)
-        {
-            mdb_txn_abort(txn);
-            return -EIO;
-        }
-        if(out_data_id)
-            memcpy(out_data_id, data_id, DB_ID_SIZE);
-        return 0;
-    }
-    else
-    {
-        /* Unexpected LMDB error */
-        mdb_txn_abort(txn);
-        return -EIO;
-    }
 }
 
 /** Given a data id, resolve the absolute filesystem path of its blob. */
