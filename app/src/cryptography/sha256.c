@@ -136,7 +136,7 @@ static int make_tmp_in_dir(const char* tmpdir, char out_path[PATH_MAX])
         }
         name[8 + 32] = '\0';
 
-        int fd       = openat(dfd, name, O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC, 0660);
+        int fd = openat(dfd, name, O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC, 0660);
         if(fd >= 0)
         {
             size_t dlen = strlen(tmpdir);
@@ -171,13 +171,15 @@ static int make_tmp_in_dir(const char* tmpdir, char out_path[PATH_MAX])
     return -1;
 }
 
-static int publish_or_discard(const char* root, const Sha256* d, const char* tmp_path)
+static int publish_or_discard(const char* root, const Sha256* d,
+                              const char* tmp_path)
 {
     char hex[65];
     crypt_sha256_hex(d, hex);
 
     char sharddir[2048];
-    if(snprintf(sharddir, sizeof sharddir, "%s/objects/sha256/%.2s/%.2s", root, hex, hex + 2) >= (int)sizeof sharddir)
+    if(snprintf(sharddir, sizeof sharddir, "%s/objects/sha256/%.2s/%.2s", root,
+                hex, hex + 2) >= (int)sizeof sharddir)
     {
         unlink(tmp_path);
         errno = ENAMETOOLONG;
@@ -221,7 +223,8 @@ int crypt_store_sha256_object_from_fd(const char* root, int src_fd,
         return -1;
 
     char tmpdir[2048];
-    if(snprintf(tmpdir, sizeof tmpdir, "%s/objects/sha256", root) >= (int)sizeof tmpdir)
+    if(snprintf(tmpdir, sizeof tmpdir, "%s/objects/sha256", root) >=
+       (int)sizeof tmpdir)
     {
         errno = ENAMETOOLONG;
         return -1;

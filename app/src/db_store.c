@@ -80,22 +80,28 @@ struct DB
     MDB_dbi  db_sha2data;      /* SHA -> data_id DBI */
 
     /* Presence-only ACLs */
-    MDB_dbi  db_acl_fwd;    /* key=principal(16)|rtype(1)|data(16), val=uint8_t(1) */
-    MDB_dbi  db_acl_by_res; /* key=data(16)|rtype(1),                val=principal(16) (dupsort, dupfixed) */
+    MDB_dbi
+        db_acl_fwd; /* key=principal(16)|rtype(1)|data(16), val=uint8_t(1) */
+    MDB_dbi
+        db_acl_by_res; /* key=data(16)|rtype(1),                val=principal(16) (dupsort, dupfixed) */
 };
 
 /* Private global */
 static struct DB *DB = NULL; /* Global DB handle */
 
 /* Logical names of LMDB sub-databases */
-#define DB_USER          "user"          /* key=id(16)                 , val=UserPacked */
-#define DB_USER_EMAIL2ID "user_email2id" /* key=email                  , val=id(16)     */
-#define DB_DATA_META     "data_meta"     /* key=data_id(16)            , val=DataMeta   */
-#define DB_SHA2DATA      "sha2data"      /* key=sha(32)                , val=data_id(16)*/
+#define DB_USER "user" /* key=id(16)                 , val=UserPacked */
+#define DB_USER_EMAIL2ID \
+    "user_email2id" /* key=email                  , val=id(16)     */
+#define DB_DATA_META \
+    "data_meta"                /* key=data_id(16)            , val=DataMeta   */
+#define DB_SHA2DATA "sha2data" /* key=sha(32)                , val=data_id(16)*/
 
 /* Presence-only ACL DBs */
-#define DB_ACL_FWD       "acl_fwd"    /* key=principal(16)|rtype(1)|data(16), val=uint8_t sentinel */
-#define DB_ACL_BY_RES    "acl_by_res" /* key=data(16)|rtype(1),              val=principal(16) */
+#define DB_ACL_FWD \
+    "acl_fwd" /* key=principal(16)|rtype(1)|data(16), val=uint8_t sentinel */
+#define DB_ACL_BY_RES \
+    "acl_by_res" /* key=data(16)|rtype(1),              val=principal(16) */
 
 /* ========================================================================== */
 /*                                Local Helpers                               */
@@ -141,8 +147,7 @@ static uint64_t now_secs(void)
 
 /* 33 bytes: principal(16) | rtype(1) | resource(16) */
 static inline void acl_fwd_key(uint8_t       out[33],
-                               const uint8_t principal[DB_ID_SIZE],
-                               char          rtype,
+                               const uint8_t principal[DB_ID_SIZE], char rtype,
                                const uint8_t resource[DB_ID_SIZE])
 {
     memcpy(out, principal, DB_ID_SIZE);
@@ -152,8 +157,7 @@ static inline void acl_fwd_key(uint8_t       out[33],
 
 /* 17 bytes: resource(16) | rtype(1)  (reverse key) */
 static inline void acl_rev_key(uint8_t       out[17],
-                               const uint8_t resource[DB_ID_SIZE],
-                               char          rtype)
+                               const uint8_t resource[DB_ID_SIZE], char rtype)
 {
     memcpy(out, resource, DB_ID_SIZE);
     out[16] = (uint8_t)rtype;
@@ -162,10 +166,8 @@ static inline void acl_rev_key(uint8_t       out[17],
 /* ---------------------- Presence-only ACL ops ---------------------------- */
 
 /** Grant presence in both forward and reverse ACL DBs (same txn). */
-static int acl_grant_txn(MDB_txn      *txn,
-                         const uint8_t principal[DB_ID_SIZE],
-                         char          rtype,
-                         const uint8_t resource[DB_ID_SIZE])
+static int acl_grant_txn(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
+                         char rtype, const uint8_t resource[DB_ID_SIZE])
 {
     uint8_t fkey[33];
     acl_fwd_key(fkey, principal, rtype, resource);
@@ -208,8 +210,7 @@ static int acl_grant_txn(MDB_txn      *txn,
 /** Check forward presence (returns 0 if present, -ENOENT if absent). */
 static int acl_check_present_txn(MDB_txn      *txn,
                                  const uint8_t principal[DB_ID_SIZE],
-                                 char          rtype,
-                                 const uint8_t resource[DB_ID_SIZE])
+                                 char rtype, const uint8_t resource[DB_ID_SIZE])
 {
     uint8_t fkey[33];
     acl_fwd_key(fkey, principal, rtype, resource);
@@ -224,8 +225,7 @@ static int acl_check_present_txn(MDB_txn      *txn,
 }
 
 /** Effective access if present in any of {O,S,U}. */
-static int acl_has_any_txn(MDB_txn      *txn,
-                           const uint8_t principal[DB_ID_SIZE],
+static int acl_has_any_txn(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
                            const uint8_t resource[DB_ID_SIZE])
 {
     int rc;
@@ -308,7 +308,8 @@ static int db_user_get_role(const uint8_t id[DB_ID_SIZE], user_role_t *out_role)
 /** Set a user's role in the DB. */
 static int db_user_set_role(uint8_t userId[DB_ID_SIZE], user_role_t role)
 {
-    if(role != USER_ROLE_VIEWER && role != USER_ROLE_PUBLISHER && role != USER_ROLE_NONE)
+    if(role != USER_ROLE_VIEWER && role != USER_ROLE_PUBLISHER &&
+       role != USER_ROLE_NONE)
         return -EINVAL;
 
     MDB_txn *txn;
@@ -397,17 +398,22 @@ int db_open(const char *root_dir, uint64_t mapsize_bytes)
 
     if(mdb_dbi_open(txn, DB_USER, MDB_CREATE, &DB->db_user) != MDB_SUCCESS)
         goto fail;
-    if(mdb_dbi_open(txn, DB_USER_EMAIL2ID, MDB_CREATE, &DB->db_user_email2id) != MDB_SUCCESS)
+    if(mdb_dbi_open(txn, DB_USER_EMAIL2ID, MDB_CREATE, &DB->db_user_email2id) !=
+       MDB_SUCCESS)
         goto fail;
-    if(mdb_dbi_open(txn, DB_DATA_META, MDB_CREATE, &DB->db_data_meta) != MDB_SUCCESS)
+    if(mdb_dbi_open(txn, DB_DATA_META, MDB_CREATE, &DB->db_data_meta) !=
+       MDB_SUCCESS)
         goto fail;
-    if(mdb_dbi_open(txn, DB_SHA2DATA, MDB_CREATE, &DB->db_sha2data) != MDB_SUCCESS)
+    if(mdb_dbi_open(txn, DB_SHA2DATA, MDB_CREATE, &DB->db_sha2data) !=
+       MDB_SUCCESS)
         goto fail;
 
     /* ACLs: forward (presence sentinel) + reverse (dupsort, dupfixed) */
-    if(mdb_dbi_open(txn, DB_ACL_FWD, MDB_CREATE, &DB->db_acl_fwd) != MDB_SUCCESS)
+    if(mdb_dbi_open(txn, DB_ACL_FWD, MDB_CREATE, &DB->db_acl_fwd) !=
+       MDB_SUCCESS)
         goto fail;
-    if(mdb_dbi_open(txn, DB_ACL_BY_RES, MDB_CREATE | MDB_DUPSORT | MDB_DUPFIXED, &DB->db_acl_by_res) != MDB_SUCCESS)
+    if(mdb_dbi_open(txn, DB_ACL_BY_RES, MDB_CREATE | MDB_DUPSORT | MDB_DUPFIXED,
+                    &DB->db_acl_by_res) != MDB_SUCCESS)
         goto fail;
 
     if(mdb_txn_commit(txn) != MDB_SUCCESS)
@@ -445,6 +451,7 @@ int db_add_user(const char email[EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
     /* Lookup first (RO) */
     uint8_t existing[DB_ID_SIZE] = {0};
     int     frc                  = db_user_find_by_email(email, existing);
+
     if(frc == 0)
     {
         if(out_id)
@@ -460,14 +467,14 @@ int db_add_user(const char email[EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
     uint8_t id[DB_ID_SIZE];
     do
     {
-        id128_rand(id);
+        uuid_v7(id);
     } while(db_user_find_by_id(id, NULL) == 0);
 
     /* Prepare packed user */
     UserPacked up = {0};
+    up.role       = USER_ROLE_NONE;
     memcpy(up.id, id, DB_ID_SIZE);
     snprintf(up.email, sizeof up.email, "%.*s", EMAIL_MAX_LEN - 1, email);
-    up.role      = USER_ROLE_NONE;
 
     /* Insert in a RW transaction */
     MDB_txn *txn = NULL;
@@ -494,7 +501,7 @@ int db_add_user(const char email[EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
     /* email -> id */
     MDB_val k_email = {.mv_size = strlen(email), .mv_data = (void *)email};
     MDB_val v_id    = {.mv_size = DB_ID_SIZE, .mv_data = (void *)id};
-    mrc             = mdb_put(txn, DB->db_user_email2id, &k_email, &v_id, MDB_NOOVERWRITE);
+    mrc = mdb_put(txn, DB->db_user_email2id, &k_email, &v_id, MDB_NOOVERWRITE);
     if(mrc == MDB_KEYEXIST)
     {
         mdb_txn_abort(txn);
@@ -546,7 +553,8 @@ int db_user_find_by_id(const uint8_t id[DB_ID_SIZE], char out[EMAIL_MAX_LEN])
 }
 
 /** Look up a user id by email. */
-int db_user_find_by_email(const char email[EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
+int db_user_find_by_email(const char email[EMAIL_MAX_LEN],
+                          uint8_t    out_id[DB_ID_SIZE])
 {
     if(!email || email[0] == '\0')
         return -EINVAL;
@@ -649,7 +657,8 @@ int db_user_share_data_with_user_email(uint8_t    owner[DB_ID_SIZE],
 }
 
 /** Ingest a blob, deduplicate by SHA-256, grant owner presence. */
-int db_upload_data_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd, const char *mime, uint8_t out_data_id[DB_ID_SIZE])
+int db_upload_data_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd,
+                           const char *mime, uint8_t out_data_id[DB_ID_SIZE])
 {
     if(!owner || src_fd < 0)
         return -EINVAL;
@@ -670,7 +679,8 @@ int db_upload_data_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd, const char *mi
     /* One-pass ingest: stream → temp → fsync → atomic publish; compute digest+size */
     Sha256 digest;
     size_t total = 0;
-    if(crypt_store_sha256_object_from_fd(DB->root, src_fd, &digest, &total) != 0)
+    if(crypt_store_sha256_object_from_fd(DB->root, src_fd, &digest, &total) !=
+       0)
         return -EIO;
 
     /* Upsert sha2data and data_meta in a single transaction */
@@ -704,13 +714,14 @@ int db_upload_data_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd, const char *mi
     /* New object: assign id and write meta + sha2data */
     else if(mrc == MDB_NOTFOUND)
     {
-        id128_rand(data_id);
+        uuid_v7(data_id);
 
         DataMeta mp;
         memset(&mp, 0, sizeof mp);
         mp.ver = 1;
         memcpy(mp.sha, digest.b, 32);
-        snprintf(mp.mime, sizeof mp.mime, "%s", (mime && *mime) ? mime : "application/octet-stream");
+        snprintf(mp.mime, sizeof mp.mime, "%s",
+                 (mime && *mime) ? mime : "application/octet-stream");
         mp.size       = (uint64_t)total;
         mp.created_at = now_secs();
         memcpy(mp.owner, owner, DB_ID_SIZE);
@@ -753,7 +764,8 @@ int db_upload_data_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd, const char *mi
 }
 
 /** Given a data id, resolve the absolute filesystem path of its blob. */
-int db_resolve_data_path(uint8_t data_id[DB_ID_SIZE], char *out_path, unsigned long out_sz)
+int db_resolve_data_path(uint8_t data_id[DB_ID_SIZE], char *out_path,
+                         unsigned long out_sz)
 {
     if(!out_path || out_sz == 0 || !data_id)
         return -EINVAL;
@@ -800,9 +812,8 @@ int db_user_list_all(uint8_t *out_ids, size_t *inout_count_max)
     }
 
     MDB_val k = {0}, v = {0};
-    for(int rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST);
-        rc == MDB_SUCCESS;
-        rc = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
+    for(int rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST); rc == MDB_SUCCESS;
+        rc     = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
     {
         if(v.mv_size != sizeof(UserPacked))
             continue;
@@ -835,9 +846,8 @@ int db_user_list_publishers(uint8_t *out_ids, size_t *inout_count_max)
     }
 
     MDB_val k = {0}, v = {0};
-    for(int rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST);
-        rc == MDB_SUCCESS;
-        rc = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
+    for(int rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST); rc == MDB_SUCCESS;
+        rc     = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
     {
         if(v.mv_size != sizeof(UserPacked))
             continue;
@@ -873,9 +883,8 @@ int db_user_list_viewers(uint8_t *out_ids, size_t *inout_count_max)
     }
 
     MDB_val k = {0}, v = {0};
-    for(int rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST);
-        rc == MDB_SUCCESS;
-        rc = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
+    for(int rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST); rc == MDB_SUCCESS;
+        rc     = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
     {
         if(v.mv_size != sizeof(UserPacked))
             continue;
@@ -900,7 +909,8 @@ int db_user_list_viewers(uint8_t *out_ids, size_t *inout_count_max)
  *        Only the owner (rtype 'O') can delete.
  * @return 0 on success, -EPERM if not owner, -ENOENT if missing, -EIO on error.
  */
-int db_owner_delete_data(const uint8_t actor[DB_ID_SIZE], const uint8_t data_id[DB_ID_SIZE])
+int db_owner_delete_data(const uint8_t actor[DB_ID_SIZE],
+                         const uint8_t data_id[DB_ID_SIZE])
 {
     if(!actor || !data_id)
         return -EINVAL;

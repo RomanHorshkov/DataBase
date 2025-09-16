@@ -54,12 +54,13 @@ int mkdir_p(const char* path, mode_t mode)
     return 0;
 }
 
-int path_sha256(char* out, size_t out_sz, const char* root, const char* sha_hex64)
+int path_sha256(char* out, size_t out_sz, const char* root,
+                const char* sha_hex64)
 {
     if(!out || !root || !sha_hex64 || strlen(sha_hex64) != 64)
         return -1;
-    snprintf(out, out_sz, "%s/objects/sha256/%.2s/%.2s/%s",
-             root, sha_hex64, sha_hex64 + 2, sha_hex64);
+    snprintf(out, out_sz, "%s/objects/sha256/%.2s/%.2s/%s", root, sha_hex64,
+             sha_hex64 + 2, sha_hex64);
     return 0;
 }
 

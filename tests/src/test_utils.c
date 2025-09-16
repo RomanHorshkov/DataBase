@@ -142,7 +142,8 @@ static int tu_du_inner(const char* path, uint64_t* total)
     return 0;
 }
 
-char* tu_generate_email_list_seq(size_t n, const char* prefix, const char* domain)
+char* tu_generate_email_list_seq(size_t n, const char* prefix,
+                                 const char* domain)
 {
     if(!domain)
         domain = "@example.com";
@@ -381,7 +382,8 @@ void tu_err(const char* fmt, ...)
 }
 
 /* Hard stdio redirect (affects printf). */
-int tu_redirect_stdio_begin(const char* out_path, const char* err_path, int saved_fd[2])
+int tu_redirect_stdio_begin(const char* out_path, const char* err_path,
+                            int saved_fd[2])
 {
     saved_fd[0] = -1;
     saved_fd[1] = -1;
@@ -454,20 +456,19 @@ int tu_redirect_stdio_end(int saved_fd[2])
 
 static void print_usage(const char* prog, const char* suite)
 {
-    fprintf(SERR(),
-            "Usage: %s [suite:%s] [--list] [--repeat N] [--help]\n",
+    fprintf(SERR(), "Usage: %s [suite:%s] [--list] [--repeat N] [--help]\n",
             prog, suite);
 }
 
 /* one line result */
 static void tu_print_result_line(const char* suite, const char* name, int rc)
 {
-    fprintf(SOUT(), "[%s] • %s %s\n",
-            suite, name, (rc == 0 && g_failures == 0) ? C_GRN "OK" C_RESET : C_RED "FAIL" C_RESET);
+    fprintf(SOUT(), "[%s] • %s %s\n", suite, name,
+            (rc == 0 && g_failures == 0) ? C_GRN "OK" C_RESET
+                                         : C_RED "FAIL" C_RESET);
 }
 
-int tu_run_suite(const char*    suite_name,
-                 const TU_Test* tests, size_t ntests,
+int tu_run_suite(const char* suite_name, const TU_Test* tests, size_t ntests,
                  int argc, char** argv)
 {
     bool list   = false;
@@ -505,7 +506,8 @@ int tu_run_suite(const char*    suite_name,
     for(int r = 0; r < repeat; r++)
     {
         if(repeat > 1)
-            fprintf(SOUT(), C_CYN "=== %s run %d/%d ===" C_RESET "\n", suite_name, r + 1, repeat);
+            fprintf(SOUT(), C_CYN "=== %s run %d/%d ===" C_RESET "\n",
+                    suite_name, r + 1, repeat);
         for(size_t i = 0; i < ntests; i++)
         {
             g_failures = 0;
@@ -524,12 +526,14 @@ int tu_run_suite(const char*    suite_name,
 
     if(grand_fail == 0)
     {
-        fprintf(SOUT(), C_GRN "\n[%s] All %d test(s) passed.\n" C_RESET, suite_name, grand_run);
+        fprintf(SOUT(), C_GRN "\n[%s] All %d test(s) passed.\n" C_RESET,
+                suite_name, grand_run);
         return 0;
     }
     else
     {
-        fprintf(SOUT(), C_RED "\n[%s] %d/%d test(s) failed.\n" C_RESET, suite_name, grand_fail, grand_run);
+        fprintf(SOUT(), C_RED "\n[%s] %d/%d test(s) failed.\n" C_RESET,
+                suite_name, grand_fail, grand_run);
         return 1;
     }
 }
@@ -543,12 +547,14 @@ int tu_run_and_time(const char* name, test_fn fn)
     double dt  = tu_now_ms() - t0;
     if(rc == 0 && g_failures == 0)
     {
-        fprintf(SOUT(), "[time] • %s " C_GRN "OK" C_RESET " (%.1f ms)\n", name, dt);
+        fprintf(SOUT(), "[time] • %s " C_GRN "OK" C_RESET " (%.1f ms)\n", name,
+                dt);
         return 0;
     }
     else
     {
-        fprintf(SOUT(), "[time] • %s " C_RED "FAIL" C_RESET " (%.1f ms)\n", name, dt);
+        fprintf(SOUT(), "[time] • %s " C_RED "FAIL" C_RESET " (%.1f ms)\n",
+                name, dt);
         return 1;
     }
 }

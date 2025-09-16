@@ -42,7 +42,8 @@ int  db_add_user(const char email[EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE]);
  * @param out_email Output email.
  * @return 0 on success, -ENOENT if not found, -EIO on DB error.
  */
-int  db_user_find_by_id(const uint8_t id[DB_ID_SIZE], char out_email[EMAIL_MAX_LEN]);
+int  db_user_find_by_id(const uint8_t id[DB_ID_SIZE],
+                        char          out_email[EMAIL_MAX_LEN]);
 
 /**
  * @brief Look up a user id by email.
@@ -50,7 +51,8 @@ int  db_user_find_by_id(const uint8_t id[DB_ID_SIZE], char out_email[EMAIL_MAX_L
  * @param out_id Output user ID.
  * @return 0 on success, -ENOENT if not found, -EIO on DB error.
  */
-int  db_user_find_by_email(const char email[EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE]);
+int  db_user_find_by_email(const char email[EMAIL_MAX_LEN],
+                           uint8_t    out_id[DB_ID_SIZE]);
 
 /**
  * @brief Share data with a user identified by email (grants 'U' presence).
@@ -113,9 +115,8 @@ int  db_user_list_viewers(uint8_t* out_ids, size_t* inout_count_max);
  * @return 0 on success, -EEXIST if content existed (id returned), -EPERM if not publisher,
  *         -ENOENT if owner not found, -EINVAL bad args, -EIO on error.
  */
-int  db_upload_data_from_fd(uint8_t owner[DB_ID_SIZE],
-                            int src_fd, const char* mime,
-                            uint8_t out_data_id[DB_ID_SIZE]);
+int  db_upload_data_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd,
+                            const char* mime, uint8_t out_data_id[DB_ID_SIZE]);
 
 /**
  * @brief Given a data id, resolve the absolute filesystem path of its blob.
@@ -124,7 +125,8 @@ int  db_upload_data_from_fd(uint8_t owner[DB_ID_SIZE],
  * @param out_sz Output buffer size.
  * @return 0 on success, -ENOENT if meta missing, -EINVAL bad args, -EIO on path error.
  */
-int  db_resolve_data_path(uint8_t img_id[DB_ID_SIZE], char* out_path, unsigned long out_sz);
+int  db_resolve_data_path(uint8_t img_id[DB_ID_SIZE], char* out_path,
+                          unsigned long out_sz);
 
 /**
  * @brief Owner-only delete that removes: forward ACLs, reverse ACLs, sha->data,
@@ -133,7 +135,8 @@ int  db_resolve_data_path(uint8_t img_id[DB_ID_SIZE], char* out_path, unsigned l
  * @param data_id Data to delete.
  * @return 0 on success, -EPERM if actor not owner, -ENOENT if missing, -EIO otherwise.
  */
-int  db_owner_delete_data(const uint8_t actor[DB_ID_SIZE], const uint8_t data_id[DB_ID_SIZE]);
+int  db_owner_delete_data(const uint8_t actor[DB_ID_SIZE],
+                          const uint8_t data_id[DB_ID_SIZE]);
 
 /* ACL helpers and operations (reserved for future use) */
 /*
@@ -141,6 +144,7 @@ int  db_owner_delete_data(const uint8_t actor[DB_ID_SIZE], const uint8_t data_id
  * int db_revoke_data_from_user_id(uint8_t owner[DB_ID_SIZE], uint8_t data_id[DB_ID_SIZE], const uint8_t user_id[DB_ID_SIZE]);
  */
 
-int  db_env_metrics(uint64_t* used_bytes, uint64_t* mapsize_bytes, uint32_t* page_size);
+int  db_env_metrics(uint64_t* used_bytes, uint64_t* mapsize_bytes,
+                    uint32_t* page_size);
 
 #endif /* DB_STORE_H */

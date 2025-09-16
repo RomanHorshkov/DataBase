@@ -80,23 +80,40 @@ int main(void)
     }
 
     /* create three blobs on disk */
-    int     fd_shared            = make_blob("./blob_shared.dcm", "shared-seed-001");
-    int     fd_A                 = make_blob("./blob_A.dcm", "unique-A");
-    int     fd_B                 = make_blob("./blob_B.dcm", "unique-B");
+    int     fd_shared = make_blob("./blob_shared.dcm", "shared-seed-001");
+    int     fd_A      = make_blob("./blob_A.dcm", "unique-A");
+    int     fd_B      = make_blob("./blob_B.dcm", "unique-B");
 
     /* 2) seed users */
     char    alice[EMAIL_MAX_LEN] = "alice@example.com";
     char    bob[EMAIL_MAX_LEN]   = "bob@example.com";
     char    carol[EMAIL_MAX_LEN] = "carol@example.com";
-    uint8_t UA[DB_ID_SIZE] = {0}, UB[DB_ID_SIZE] = {0}, UC[DB_ID_SIZE] = {0};
+    char    anton[EMAIL_MAX_LEN] = "anton@example.com";
+    char    luana[EMAIL_MAX_LEN] = "luana@example.com";
+    char    roman[EMAIL_MAX_LEN] = "roman@example.com";
+    char    luca[EMAIL_MAX_LEN] = "luca@example.com";
+    char    franco[EMAIL_MAX_LEN] = "franco@example.com";
+    uint8_t UA[DB_ID_SIZE] = {0}, UB[DB_ID_SIZE] = {0}, UC[DB_ID_SIZE] = {0},
+            UD[DB_ID_SIZE] = {0}, UE[DB_ID_SIZE] = {0}, UF[DB_ID_SIZE] = {0},
+            UG[DB_ID_SIZE] = {0}, UH[DB_ID_SIZE] = {0};
 
     db_add_user(alice, UA);
     db_add_user(bob, UB);
     db_add_user(carol, UC);
+    db_add_user(anton, UD);
+    db_add_user(luana, UE);
+    db_add_user(roman, UF);
+    db_add_user(luca, UG);
+    db_add_user(franco, UH);
 
     print_id("Alice", UA);
     print_id("Bob  ", UB);
     print_id("Carol", UC);
+    print_id("Anton", UD);
+    print_id("Luana", UE);
+    print_id("Roman", UF);
+    print_id("Luca", UG);
+    print_id("Franco", UH);
 
     db_print_publishers();
     db_print_viewers();
@@ -105,7 +122,8 @@ int main(void)
 
     /* upload under Alice */
     puts("=== Alice uploads ===");
-    uint8_t D_shared[DB_ID_SIZE] = {0}, D_A[DB_ID_SIZE] = {0}, D_B[DB_ID_SIZE] = {0};
+    uint8_t D_shared[DB_ID_SIZE] = {0}, D_A[DB_ID_SIZE] = {0},
+            D_B[DB_ID_SIZE] = {0};
     db_upload_data_from_fd(UA, fd_shared, "application/dicom", D_shared);
     // db_upload_data_from_fd(UA, fd_A,      "application/dicom", D_A);
     // db_upload_data_from_fd(UA, fd_B,      "application/dicom", D_B);

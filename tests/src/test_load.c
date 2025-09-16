@@ -26,10 +26,11 @@ static int tl_add_many_users_sample_lookup(void)
         return -1;
     }
 
-    const size_t N      = env_sz("STRESS_USERS", 1000); /* total users to insert */
-    const size_t SAMPLE = env_sz("STRESS_SAMPLE", 100); /* lookups after insert */
+    const size_t N = env_sz("STRESS_USERS", 1000); /* total users to insert */
+    const size_t SAMPLE =
+        env_sz("STRESS_SAMPLE", 100); /* lookups after insert */
 
-    char*        emails = tu_generate_email_list_seq(N, "u_", "@x");
+    char* emails = tu_generate_email_list_seq(N, "u_", "@x");
     if(!emails)
     {
         tu_teardown_store(&ctx);
@@ -60,7 +61,8 @@ static int tl_add_many_users_sample_lookup(void)
     {
         if(db_add_user(emails + i * EMAIL_MAX_LEN, ids + i * 16) != 0)
         {
-            tu_failf(__FILE__, __LINE__, "add_user id=%s at i=%zu", ids + i * 16, i);
+            tu_failf(__FILE__, __LINE__, "add_user id=%s at i=%zu",
+                     ids + i * 16, i);
             free(ids);
             free(emails);
             tu_teardown_store(&ctx);
@@ -73,7 +75,8 @@ static int tl_add_many_users_sample_lookup(void)
     {
         if(db_user_find_by_id(ids + i * 16, NULL) != 0)
         {
-            tu_failf(__FILE__, __LINE__, "lookup id=%s at i=%zu", ids + i * 16, i);
+            tu_failf(__FILE__, __LINE__, "lookup id=%s at i=%zu", ids + i * 16,
+                     i);
             free(ids);
             free(emails);
             tu_teardown_store(&ctx);
@@ -98,9 +101,11 @@ static int tl_add_many_users_sample_lookup(void)
 
     fprintf(stderr, C_YEL "insert %zu users: %.1f ms (%.1f µs/user)\n" C_RESET,
             N, t1 - t0, 1000.0 * (t1 - t0) / (double)N);
-    fprintf(stderr, C_YEL "sample %zu id-lookups: %.1f ms (%.1f µs/op)\n" C_RESET,
+    fprintf(stderr,
+            C_YEL "sample %zu id-lookups: %.1f ms (%.1f µs/op)\n" C_RESET,
             SAMPLE, t2 - t1, 1000.0 * (t2 - t1) / (double)SAMPLE);
-    fprintf(stderr, C_YEL "sample %zu email-lookups: %.1f ms (%.1f µs/op)\n" C_RESET,
+    fprintf(stderr,
+            C_YEL "sample %zu email-lookups: %.1f ms (%.1f µs/op)\n" C_RESET,
             SAMPLE, t3 - t2, 1000.0 * (t3 - t2) / (double)SAMPLE);
 
     free(ids);
@@ -119,7 +124,7 @@ static int tl_db_measure_size(void)
     }
 
     const size_t N      = env_sz("STRESS_USERS", 100000); /* total inserts */
-    const size_t STEP   = env_sz("STRESS_STEP", 5000);    /* report every STEP */
+    const size_t STEP   = env_sz("STRESS_STEP", 5000); /* report every STEP */
 
     char*        emails = tu_generate_email_list_seq(N, NULL, NULL);
     if(!emails)
@@ -158,7 +163,8 @@ static int tl_db_measure_size(void)
     {
         if(db_add_user(emails + i * EMAIL_MAX_LEN, ids + i * 16) != 0)
         {
-            tu_failf(__FILE__, __LINE__, "add_user id=%s at i=%zu", ids + i * 16, i);
+            tu_failf(__FILE__, __LINE__, "add_user id=%s at i=%zu",
+                     ids + i * 16, i);
             free(ids);
             free(emails);
             tu_teardown_store(&ctx);
@@ -170,7 +176,8 @@ static int tl_db_measure_size(void)
             char email_check[128] = {0};
             if(db_user_find_by_id(ids + i * 16, email_check) != 0)
             {
-                tu_failf(__FILE__, __LINE__, "lookup id=%d at i=%zu, email: %s", ids + i * 16, i, emails + i * EMAIL_MAX_LEN);
+                tu_failf(__FILE__, __LINE__, "lookup id=%d at i=%zu, email: %s",
+                         ids + i * 16, i, emails + i * EMAIL_MAX_LEN);
                 free(ids);
                 free(emails);
                 tu_teardown_store(&ctx);
@@ -190,11 +197,10 @@ static int tl_db_measure_size(void)
                           " usr %d "
                           "total=%" PRIu64 " KB  meta=%" PRIu64
                           " KB  "
-                          "lmdb_used=%" PRIu64 " KB  lmdb_map=%" PRIu64 " KB  psize=%u\n",
-                    i + 1, N,
-                    emails[i * EMAIL_MAX_LEN],
-                    du_total / 1024, du_meta / 1024,
-                    lmdb_used / 1024, lmdb_map / 1024, psize);
+                          "lmdb_used=%" PRIu64 " KB  lmdb_map=%" PRIu64
+                          " KB  psize=%u\n",
+                    i + 1, N, emails[i * EMAIL_MAX_LEN], du_total / 1024,
+                    du_meta / 1024, lmdb_used / 1024, lmdb_map / 1024, psize);
             fflush(stderr);
         }
     }
