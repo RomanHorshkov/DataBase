@@ -353,7 +353,11 @@ int db_add_user(const char email[EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
     /* Lookup first (RO) */
     uint8_t existing[DB_ID_SIZE] = {0};
     int frc = db_user_find_by_email(email, existing);
-    if (frc == 0) { if (out_id) memcpy(out_id, existing, DB_ID_SIZE); return -EEXIST; }
+    if (frc == 0)
+    {
+        if (out_id) memcpy(out_id, existing, DB_ID_SIZE);
+        return -EEXIST;
+    }
     else if (frc != -ENOENT) { return -EIO; }
 
     /* Generate unique id */
@@ -417,8 +421,16 @@ int db_user_find_by_email(const char email[EMAIL_MAX_LEN], uint8_t out_id[DB_ID_
     MDB_val k = { .mv_size = strlen(email), .mv_data = (void *) email };
     MDB_val v = { 0 };
     int mrc = mdb_get(txn, DB->db_user_email2id, &k, &v);
-    if (mrc != MDB_SUCCESS) { mdb_txn_abort(txn); return map_mdb_err(mrc); }
-    if (v.mv_size != DB_ID_SIZE) { mdb_txn_abort(txn); return -EIO; }
+    if (mrc != MDB_SUCCESS)
+    {
+        mdb_txn_abort(txn);
+        return map_mdb_err(mrc);
+    }
+    if (v.mv_size != DB_ID_SIZE)
+    {
+        mdb_txn_abort(txn);
+        return -EIO;
+    }
 
     if (out_id) memcpy(out_id, v.mv_data, DB_ID_SIZE);
     mdb_txn_abort(txn);
@@ -670,7 +682,8 @@ int db_owner_delete_data(const uint8_t actor[DB_ID_SIZE], const uint8_t data_id[
         if (rc != 0)       { mdb_txn_abort(txn); return rc; }
     }
 
-    /* For each rtype, repeatedly position on (data|rtype), delete one dup at a time */
+    /* For each rtype, repeatedly position on (data|rtype), delete one dup at a time,
+    i.e. dereference the relationships between users and this data */
     const char rtypes[3] = { ACL_RTYPE_OWNER, ACL_RTYPE_SHARE, ACL_RTYPE_USER };
     for (size_t i = 0; i < 3; ++i)
     {
@@ -730,5 +743,18 @@ int db_owner_delete_data(const uint8_t actor[DB_ID_SIZE], const uint8_t data_id[
             unlink(path); /* ignore errors; DB is source of truth */
     }
 
+    return 0;
+}
+
+int db_env_metrics(uint64_t* used, uint64_t* mapsize, uint32_t* psize)
+{
+    if (!DB || !DB->env) return -EINVAL;
+    MDB_envinfo info; MDB_stat st;
+    int rc;
+    rc = mdb_env_info(DB->env, &info); if (rc != MDB_SUCCESS) return -EIO;
+    rc = mdb_env_stat(DB->env, &st);   if (rc != MDB_SUCCESS) return -EIO;
+    if (mapsize) *mapsize = (uint64_t)info.me_mapsize;
+    if (psize)   *psize   = (uint32_t)st.ms_psize;
+    if (used)    *used    = ((uint64_t)info.me_last_pgno + 1ull) * (uint64_t)st.ms_psize;
     return 0;
 }

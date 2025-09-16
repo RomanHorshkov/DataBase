@@ -22,7 +22,6 @@ else
   LMDB_CFLAGS := $(shell pkg-config --cflags lmdb 2>/dev/null)
   LMDB_LIBS   := $(shell pkg-config --libs   lmdb 2>/dev/null)
   LMDB_FOUND  := $(shell pkg-config --exists lmdb && echo 1 || echo 0)
-  # Fallback if pkg has no .pc but lib exists:
   ifeq ($(LMDB_LIBS),)
     LMDB_LIBS := -llmdb
     LMDB_FOUND := $(shell printf '#include <lmdb.h>\nint main(){mdb_env_create(0);return 0;}\n' | \
@@ -30,45 +29,62 @@ else
   endif
 endif
 
-# --- Paths & sources ---
-INCLUDES := -Iinclude -Iinclude/cryptography
+# --- Paths ---
+APP_DIR   := app
+APP_INC   := $(APP_DIR)/include
+APP_SRC   := $(APP_DIR)/src
 
+TEST_DIR  := tests
+TEST_INC  := $(TEST_DIR)/include
+TEST_SRC  := $(TEST_DIR)/src
+
+BIN_DIR   := build/bin
+
+# --- Includes ---
+INCLUDES := -I$(APP_INC) -I$(APP_INC)/cryptography -I$(TEST_INC)
+
+# --- App sources (demo binary) ---
 SRCS := \
-    src/main.c \
-    src/fsutil.c \
-    src/db_store.c \
-    src/uuid.c \
-    src/cryptography/sha256.c
+    $(APP_SRC)/main.c \
+    $(APP_SRC)/fsutil.c \
+    $(APP_SRC)/db_store.c \
+    $(APP_SRC)/uuid.c \
+    $(APP_SRC)/cryptography/sha256.c
 
-# --- Tests ---
+# --- Tests sources (test binary) ---
+# Link tests against the app objects (minus main.c)
 SRCS_TEST := \
-    src/tests/tests.c \
-    src/fsutil.c \
-    src/db_store.c \
-    src/uuid.c \
-    src/cryptography/sha256.c
+    $(TEST_SRC)/test_main.c \
+    $(TEST_SRC)/test_func.c \
+    $(TEST_SRC)/test_load.c \
+    $(TEST_SRC)/test_utils.c \
+    $(APP_SRC)/fsutil.c \
+    $(APP_SRC)/db_store.c \
+    $(APP_SRC)/uuid.c \
+    $(APP_SRC)/cryptography/sha256.c
 
+# --- Flags ---
 CFLAGS  += -O2 -Wall -Wextra -Wshadow -Wconversion -Werror $(INCLUDES) \
            $(OPENSSL_CFLAGS) $(LMDB_CFLAGS)
 LDFLAGS += $(OPENSSL_LIBS) $(LMDB_LIBS)
 
 # --- Targets ---
 .PHONY: all clean test
-all: build/bin/db_lmdb_demo
+all: $(BIN_DIR)/db_lmdb_demo
 
-
-# Require both libs to build
 ifeq ($(OPENSSL_FOUND)$(LMDB_FOUND),11)
-build/bin/db_lmdb_demo: $(SRCS)
-	@mkdir -p build/bin
+
+$(BIN_DIR)/db_lmdb_demo: $(SRCS)
+	@mkdir -p $(BIN_DIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-# --- NEW: test binary ---
-build/bin/db_tests: $(SRCS_TEST)
-	@mkdir -p build/bin
+$(BIN_DIR)/db_tests: $(SRCS_TEST)
+	@mkdir -p $(BIN_DIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
 else
-build/bin/db_lmdb_demo:
+
+$(BIN_DIR)/db_lmdb_demo:
 	@echo "[skip] Missing deps:"
 ifneq ($(OPENSSL_FOUND),1)
 	@echo "  - OpenSSL headers/libs (install: sudo apt-get install -y libssl-dev)"
@@ -78,15 +94,15 @@ ifneq ($(LMDB_FOUND),1)
 endif
 	@echo "  (pkg-config optional but recommended: sudo apt-get install -y pkg-config)"
 
-# --- NEW: stub so `make test` explains deps when missing ---
-build/bin/db_tests:
+$(BIN_DIR)/db_tests:
 	@echo "[skip] Missing deps (tests not built). See notes above."
+
 endif
 
-# --- NEW: test runner ---
-# Pass extra args: make test RUNARGS="--list" or "--filter upload --repeat 3"
-test: build/bin/db_tests
-	./build/bin/db_tests $(RUNARGS)
+# --- Test runner (same UX) ---
+# Pass extra args: make test RUNARGS="--list" or "--suite func" etc.
+test: $(BIN_DIR)/db_tests
+	./$(BIN_DIR)/db_tests $(RUNARGS)
 
 clean:
 	rm -rf build

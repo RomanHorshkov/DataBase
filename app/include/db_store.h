@@ -141,4 +141,8 @@ int db_owner_delete_data(const uint8_t actor[DB_ID_SIZE], const uint8_t data_id[
  * int db_revoke_data_from_user_id(uint8_t owner[DB_ID_SIZE], uint8_t data_id[DB_ID_SIZE], const uint8_t user_id[DB_ID_SIZE]);
  */
 
+
+
+int db_env_metrics(uint64_t* used_bytes, uint64_t* mapsize_bytes, uint32_t* page_size);
+
 #endif /* DB_STORE_H */
