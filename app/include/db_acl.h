@@ -3,7 +3,6 @@
 
 #include "db_int.h"
 
-
 /** 
  * @brief Generate a forward ACL key.
  * 33 bytes: principal(16) | rtype(1) | resource(16)
@@ -28,12 +27,15 @@ void acl_fwd_key(uint8_t out[33], const uint8_t principal[DB_ID_SIZE],
 void acl_rev_key(uint8_t out[17], const uint8_t resource[DB_ID_SIZE],
                  char rtype);
 /** Grant presence in both forward and reverse ACL DBs (same txn). */
-int acl_grant_txn(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE], char rtype, const uint8_t resource[DB_ID_SIZE]);
+int acl_grant_txn(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE], char rtype,
+                  const uint8_t resource[DB_ID_SIZE]);
 
 /** Check forward presence (returns 0 if present, -ENOENT if absent). */
-int acl_check_present_txn(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE], char rtype, const uint8_t resource[DB_ID_SIZE]);
+int acl_check_present_txn(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
+                          char rtype, const uint8_t resource[DB_ID_SIZE]);
 
 /** Effective access if present in any of {O,S,U}. */
-int acl_has_any_txn(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE], const uint8_t resource[DB_ID_SIZE]);
+int acl_has_any_txn(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
+                    const uint8_t resource[DB_ID_SIZE]);
 
 #endif /* DB_ACL_H */
