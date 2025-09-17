@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <lmdb.h>
 #include <inttypes.h>  // for PRIu64
-#include "db_store.h"
+#include "db_interface.h"
 
 /* Env knobs (with safe defaults) */
 static size_t env_sz(const char* key, size_t def)
@@ -26,9 +26,9 @@ static int tl_add_many_users_sample_lookup(void)
         return -1;
     }
 
-    const size_t N = env_sz("STRESS_USERS", 1000); /* total users to insert */
+    const size_t N = env_sz("STRESS_USERS", 5000); /* total users to insert */
     const size_t SAMPLE =
-        env_sz("STRESS_SAMPLE", 100); /* lookups after insert */
+        env_sz("STRESS_SAMPLE", 2000); /* lookups after insert */
 
     char* emails = tu_generate_email_list_seq(N, "u_", "@x");
     if(!emails)
@@ -57,18 +57,27 @@ static int tl_add_many_users_sample_lookup(void)
 
     double t0 = 0, t1 = 0, t2 = 0, t3 = 0;
     t0 = tu_now_ms();
-    for(size_t i = 0; i < N; i++)
+    if(db_add_users(N, emails))
     {
-        if(db_add_user(emails + i * EMAIL_MAX_LEN, ids + i * 16) != 0)
-        {
-            tu_failf(__FILE__, __LINE__, "add_user id=%s at i=%zu",
-                     ids + i * 16, i);
-            free(ids);
-            free(emails);
-            tu_teardown_store(&ctx);
-            return -1;
-        }
+        tu_failf(__FILE__, __LINE__, "add_users failed");
+        free(ids);
+        free(emails);
+        tu_teardown_store(&ctx);
+        return -1;
     }
+
+    // for(size_t i = 0; i < N; i++)
+    // {
+    //     if(db_add_user(emails + i * DB_EMAIL_MAX_LEN, ids + i * 16) != 0)
+    //     {
+    //         tu_failf(__FILE__, __LINE__, "add_user id=%s at i=%zu",
+    //                  ids + i * 16, i);
+    //         free(ids);
+    //         free(emails);
+    //         tu_teardown_store(&ctx);
+    //         return -1;
+    //     }
+    // }
     t1 = tu_now_ms();
 
     for(size_t i = 0; i < SAMPLE; i++)
@@ -86,7 +95,7 @@ static int tl_add_many_users_sample_lookup(void)
     t2 = tu_now_ms();
     for(size_t i = 0; i < SAMPLE; i++)
     {
-        int rc = db_user_find_by_email(subset + i * EMAIL_MAX_LEN, NULL);
+        int rc = db_user_find_by_email(subset + i * DB_EMAIL_MAX_LEN, NULL);
         if(rc != 0)
         {
             tu_failf(__FILE__, __LINE__, "lookup rc=%d at i=%zu", rc, i);
@@ -95,7 +104,7 @@ static int tl_add_many_users_sample_lookup(void)
             tu_teardown_store(&ctx);
             return -1;
         }
-        // EXPECT_TRUE(strncmp(email_out, emails + i*EMAIL_MAX_LEN, EMAIL_MAX_LEN)==0);
+        // EXPECT_TRUE(strncmp(email_out, emails + i*DB_EMAIL_MAX_LEN, DB_EMAIL_MAX_LEN)==0);
     }
     t3 = tu_now_ms();
 
@@ -123,10 +132,10 @@ static int tl_db_measure_size(void)
         return -1;
     }
 
-    const size_t N      = env_sz("STRESS_USERS", 100000); /* total inserts */
-    const size_t STEP   = env_sz("STRESS_STEP", 5000); /* report every STEP */
+    const size_t N    = env_sz("STRESS_USERS", 100000); /* total inserts */
+    const size_t STEP = env_sz("STRESS_STEP", 5000);    /* report every STEP */
 
-    char*        emails = tu_generate_email_list_seq(N, NULL, NULL);
+    char* emails = tu_generate_email_list_seq(N, NULL, NULL);
     if(!emails)
     {
         tu_teardown_store(&ctx);
@@ -161,7 +170,7 @@ static int tl_db_measure_size(void)
 
     for(size_t i = 0; i < N; ++i)
     {
-        if(db_add_user(emails + i * EMAIL_MAX_LEN, ids + i * 16) != 0)
+        if(db_add_user(emails + i * DB_EMAIL_MAX_LEN, ids + i * 16) != 0)
         {
             tu_failf(__FILE__, __LINE__, "add_user id=%s at i=%zu",
                      ids + i * 16, i);
@@ -177,15 +186,15 @@ static int tl_db_measure_size(void)
             if(db_user_find_by_id(ids + i * 16, email_check) != 0)
             {
                 tu_failf(__FILE__, __LINE__, "lookup id=%d at i=%zu, email: %s",
-                         ids + i * 16, i, emails + i * EMAIL_MAX_LEN);
+                         ids + i * 16, i, emails + i * DB_EMAIL_MAX_LEN);
                 free(ids);
                 free(emails);
                 tu_teardown_store(&ctx);
                 return -1;
             }
 
-            uint64_t du_total  = tu_dir_size_bytes(ctx.root);
-            uint64_t du_meta   = tu_dir_size_bytes(meta_dir);
+            uint64_t du_total = tu_dir_size_bytes(ctx.root);
+            uint64_t du_meta  = tu_dir_size_bytes(meta_dir);
 
             uint64_t lmdb_used = 0, lmdb_map = 0;
             uint32_t psize = 0;
@@ -199,7 +208,7 @@ static int tl_db_measure_size(void)
                           " KB  "
                           "lmdb_used=%" PRIu64 " KB  lmdb_map=%" PRIu64
                           " KB  psize=%u\n",
-                    i + 1, N, emails[i * EMAIL_MAX_LEN], du_total / 1024,
+                    i + 1, N, emails[i * DB_EMAIL_MAX_LEN], du_total / 1024,
                     du_meta / 1024, lmdb_used / 1024, lmdb_map / 1024, psize);
             fflush(stderr);
         }
@@ -229,7 +238,7 @@ static const TU_Test LOAD_TESTS[] = {
 
 static const size_t NLOAD = sizeof(LOAD_TESTS) / sizeof(LOAD_TESTS[0]);
 
-int                 run_test_load(int argc, char** argv)
+int run_test_load(int argc, char** argv)
 {
     return tu_run_suite("load", LOAD_TESTS, NLOAD, argc, argv);
 }

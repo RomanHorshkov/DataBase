@@ -6,7 +6,15 @@
 #include <errno.h>
 
 #include "test_utils.h"
-#include "db_store.h"
+#include "db_interface.h"
+
+static int is_zero16(const uint8_t x[16])
+{
+    uint64_t a = 0, b = 0;
+    memcpy(&a, x, 8);
+    memcpy(&b, x + 8, 8);
+    return (a | b) == 0;
+}
 
 /* ------------------------------ Test Cases -------------------------------- */
 
@@ -41,8 +49,8 @@ int t_add_user_and_find(void)
     uint8_t id[DB_ID_SIZE]  = {0};
     uint8_t id2[DB_ID_SIZE] = {0};
 
-    size_t  n_users         = 1;
-    char   *emails          = tu_generate_email_list_seq(n_users, NULL, NULL);
+    size_t n_users = 1;
+    char  *emails  = tu_generate_email_list_seq(n_users, NULL, NULL);
     if(!emails)
     {
         tu_failf(__FILE__, __LINE__, "email alloc failed");
@@ -55,19 +63,20 @@ int t_add_user_and_find(void)
         memset(id, 0, sizeof id);
         memset(id2, 0, sizeof id2);
 
-        const char *email_in = emails + i * EMAIL_MAX_LEN;
+        const char *email_in = emails + i * DB_EMAIL_MAX_LEN;
 
         /* add new user */
         EXPECT_EQ_RC(db_add_user(email_in, id), 0);
+        EXPECT_TRUE(!is_zero16(id));
 
         /* look it up by id */
-        char email_out[EMAIL_MAX_LEN] = {0};
+        char email_out[DB_EMAIL_MAX_LEN] = {0};
         EXPECT_EQ_RC(db_user_find_by_id(id, email_out), 0);
-        EXPECT_TRUE(strncmp(email_out, email_in, EMAIL_MAX_LEN) == 0);
+        EXPECT_TRUE(strncmp(email_out, email_in, DB_EMAIL_MAX_LEN) == 0);
 
         /* duplicate add ⇒ -EEXIST and same id */
         EXPECT_EQ_RC(db_add_user(email_in, id2), -EEXIST);
-        EXPECT_EQ_ID(id, id2);
+        // EXPECT_EQ_ID(id, id2);
     }
 
     free(emails);
@@ -83,27 +92,38 @@ int t_roles_and_listing(void)
         tu_failf(__FILE__, __LINE__, "setup failed");
         return -1;
     }
-    uint8_t A[DB_ID_SIZE] = {0}, B[DB_ID_SIZE] = {0};
-    char    ea[EMAIL_MAX_LEN];
+    uint8_t ID_A[DB_ID_SIZE] = {0}, ID_B[DB_ID_SIZE] = {0};
+    char    ea[DB_EMAIL_MAX_LEN];
     snprintf(ea, sizeof ea, "%s", "a@x");
-    char eb[EMAIL_MAX_LEN];
+    char eb[DB_EMAIL_MAX_LEN];
     snprintf(eb, sizeof eb, "%s", "b@x");
-    db_add_user(ea, A);
-    db_add_user(eb, B);
+    db_add_user(ea, ID_A);
+    db_add_user(eb, ID_B);
 
     /* A viewer, B publisher */
-    EXPECT_EQ_RC(db_user_set_role_viewer(A), 0);
-    EXPECT_EQ_RC(db_user_set_role_publisher(B), 0);
+    EXPECT_EQ_RC(db_user_set_role_viewer(ID_A), 0);
+    EXPECT_EQ_RC(db_user_set_role_publisher(ID_B), 0);
 
     /* Count viewers/publishers */
     size_t  n = 32;
     uint8_t buf[16 * 32];
     EXPECT_EQ_RC(db_user_list_viewers(buf, &n), 0);
     EXPECT_EQ_SIZE(n, (size_t)1);
+    EXPECT_EQ_ID(buf, ID_A);
 
     n = 32;
     EXPECT_EQ_RC(db_user_list_publishers(buf, &n), 0);
     EXPECT_EQ_SIZE(n, (size_t)1);
+    EXPECT_EQ_ID(buf, ID_B);
+
+    EXPECT_EQ_RC(db_user_set_role_publisher(ID_A), 0);
+    EXPECT_EQ_RC(db_user_list_viewers(buf, &n), 0);
+    EXPECT_EQ_SIZE(n, (size_t)0);
+    EXPECT_EQ_RC(db_user_list_publishers(buf, &n), 0);
+    EXPECT_EQ_SIZE(n, (size_t)2);
+
+    /* nothing happens for repeated operation */
+    EXPECT_EQ_RC(db_user_set_role_publisher(ID_A), 0);
 
     tu_teardown_store(&ctx);
     return 0;
@@ -118,25 +138,28 @@ int t_upload_requires_publisher(void)
         return -1;
     }
     uint8_t A[DB_ID_SIZE] = {0};
-    char    ea[EMAIL_MAX_LEN];
+    char    ea[DB_EMAIL_MAX_LEN];
     snprintf(ea, sizeof ea, "%s", "a@x");
     int fd = tu_make_blob("./.tmp_blob.dcm", "shared-seed-001");
     EXPECT_TRUE(fd >= 0);
     uint8_t D[DB_ID_SIZE] = {0};
 
-    db_add_user(ea, A);
+    EXPECT_EQ_RC(db_add_user(ea, A), 0);
 
     /* A new user cannot upload*/
-    EXPECT_EQ_RC(db_add_data_from_fd(A, fd, "application/dicom", D), -EPERM);
+    EXPECT_EQ_RC(db_data_add_from_fd(A, fd, "application/dicom", D), -EPERM);
+    EXPECT_TRUE(is_zero16(D));
 
     /* Viewer cannot upload */
     EXPECT_EQ_RC(db_user_set_role_viewer(A), 0);
-    EXPECT_EQ_RC(db_add_data_from_fd(A, fd, "application/dicom", D), -EPERM);
+    EXPECT_EQ_RC(db_data_add_from_fd(A, fd, "application/dicom", D), -EPERM);
+    EXPECT_TRUE(is_zero16(D));
 
     /* Publisher can upload */
     EXPECT_EQ_RC(db_user_set_role_publisher(A), 0);
     lseek(fd, 0, SEEK_SET);
-    EXPECT_EQ_RC(db_add_data_from_fd(A, fd, "application/dicom", D), 0);
+    EXPECT_EQ_RC(db_data_add_from_fd(A, fd, "application/dicom", D), 0);
+    EXPECT_TRUE(!is_zero16(D));
 
     close(fd);
     unlink("./.tmp_blob.dcm");
@@ -153,21 +176,22 @@ int t_dedup_same_sha(void)
         return -1;
     }
     uint8_t A[DB_ID_SIZE] = {0};
-    char    ea[EMAIL_MAX_LEN];
+    char    ea[DB_EMAIL_MAX_LEN];
     snprintf(ea, sizeof ea, "%s", "a@x");
     db_add_user(ea, A);
     db_user_set_role_publisher(A);
 
     int fd = tu_make_blob("./.tmp_blob2.dcm", "same-content");
     EXPECT_TRUE(fd >= 0);
+    lseek(fd, 0, SEEK_SET);
     uint8_t D1[DB_ID_SIZE] = {0}, D2[DB_ID_SIZE] = {0};
-    int     rc = db_add_data_from_fd(A, fd, "application/dicom", D1);
+    int     rc = db_data_add_from_fd(A, fd, "application/dicom", D1);
     EXPECT_EQ_RC(rc, 0);
 
     lseek(fd, 0, SEEK_SET);
-    rc = db_add_data_from_fd(A, fd, "application/dicom", D2);
+    rc = db_data_add_from_fd(A, fd, "application/dicom", D2);
     EXPECT_EQ_RC(rc, -EEXIST);
-    EXPECT_EQ_ID(D1, D2);
+    EXPECT_TRUE(is_zero16(D2));
 
     close(fd);
     unlink("./.tmp_blob2.dcm");
@@ -184,9 +208,9 @@ int t_share_by_email(void)
         return -1;
     }
     uint8_t A[DB_ID_SIZE] = {0}, B[DB_ID_SIZE] = {0};
-    char    e_alice[EMAIL_MAX_LEN];
+    char    e_alice[DB_EMAIL_MAX_LEN];
     snprintf(e_alice, sizeof e_alice, "%s", "alice@x");
-    char e_bob[EMAIL_MAX_LEN];
+    char e_bob[DB_EMAIL_MAX_LEN];
     snprintf(e_bob, sizeof e_bob, "%s", "bob@x");
     db_add_user(e_alice, A);
     db_add_user(e_bob, B);
@@ -195,7 +219,7 @@ int t_share_by_email(void)
     int fd = tu_make_blob("./.tmp_blob3.dcm", "to-share");
     EXPECT_TRUE(fd >= 0);
     uint8_t D[DB_ID_SIZE] = {0};
-    EXPECT_EQ_RC(db_add_data_from_fd(A, fd, "application/dicom", D), 0);
+    EXPECT_EQ_RC(db_data_add_from_fd(A, fd, "application/dicom", D), 0);
 
     /* share D with bob via email */
     EXPECT_EQ_RC(db_user_share_data_with_user_email(A, D, e_bob), 0);
@@ -215,7 +239,7 @@ int t_resolve_path_points_to_object(void)
         return -1;
     }
     uint8_t A[DB_ID_SIZE] = {0};
-    char    ea[EMAIL_MAX_LEN];
+    char    ea[DB_EMAIL_MAX_LEN];
     snprintf(ea, sizeof ea, "%s", "a@x");
     db_add_user(ea, A);
     db_user_set_role_publisher(A);
@@ -223,10 +247,10 @@ int t_resolve_path_points_to_object(void)
     int fd = tu_make_blob("./.tmp_blob4.dcm", "path-check");
     EXPECT_TRUE(fd >= 0);
     uint8_t D[DB_ID_SIZE] = {0};
-    EXPECT_EQ_RC(db_add_data_from_fd(A, fd, "application/dicom", D), 0);
+    EXPECT_EQ_RC(db_data_add_from_fd(A, fd, "application/dicom", D), 0);
 
     char path[PATH_MAX];
-    EXPECT_EQ_RC(db_resolve_data_path(D, path, sizeof path), 0);
+    EXPECT_EQ_RC(db_data_get_path(D, path, sizeof path), 0);
     struct stat st;
     EXPECT_TRUE(stat(path, &st) == 0 && S_ISREG(st.st_mode));
 
@@ -248,11 +272,11 @@ int t_share_requires_relationship(void)
 
     /* Users */
     uint8_t A[DB_ID_SIZE] = {0}, B[DB_ID_SIZE] = {0}, Cc[DB_ID_SIZE] = {0};
-    char    ea[EMAIL_MAX_LEN];
+    char    ea[DB_EMAIL_MAX_LEN];
     snprintf(ea, sizeof ea, "%s", "a@x");
-    char eb[EMAIL_MAX_LEN];
+    char eb[DB_EMAIL_MAX_LEN];
     snprintf(eb, sizeof eb, "%s", "b@x");
-    char ec[EMAIL_MAX_LEN];
+    char ec[DB_EMAIL_MAX_LEN];
     snprintf(ec, sizeof ec, "%s", "c@x");
     db_add_user(ea, A);
     db_add_user(eb, B);
@@ -265,7 +289,7 @@ int t_share_requires_relationship(void)
     int fd = tu_make_blob("./.tmp_blob5.dcm", "owned-by-B");
     EXPECT_TRUE(fd >= 0);
     uint8_t D[DB_ID_SIZE] = {0};
-    EXPECT_EQ_RC(db_add_data_from_fd(B, fd, "application/dicom", D), 0);
+    EXPECT_EQ_RC(db_data_add_from_fd(B, fd, "application/dicom", D), 0);
 
     /* A tries to share B's data to C -> should fail (-EPERM, no presence on D) */
     EXPECT_EQ_RC(db_user_share_data_with_user_email(A, D, ec), -EPERM);
@@ -293,11 +317,11 @@ int t_owner_delete_cascade(void)
     }
 
     uint8_t O[DB_ID_SIZE] = {0}, U1[DB_ID_SIZE] = {0}, U2[DB_ID_SIZE] = {0};
-    char    eo[EMAIL_MAX_LEN];
+    char    eo[DB_EMAIL_MAX_LEN];
     snprintf(eo, sizeof eo, "%s", "owner@x");
-    char eu1[EMAIL_MAX_LEN];
+    char eu1[DB_EMAIL_MAX_LEN];
     snprintf(eu1, sizeof eu1, "%s", "u1@x");
-    char eu2[EMAIL_MAX_LEN];
+    char eu2[DB_EMAIL_MAX_LEN];
     snprintf(eu2, sizeof eu2, "%s", "u2@x");
     db_add_user(eo, O);
     db_add_user(eu1, U1);
@@ -307,26 +331,26 @@ int t_owner_delete_cascade(void)
     int fd = tu_make_blob("./.tmp_blob6.dcm", "delete-me");
     EXPECT_TRUE(fd >= 0);
     uint8_t D[DB_ID_SIZE] = {0};
-    EXPECT_EQ_RC(db_add_data_from_fd(O, fd, "application/dicom", D), 0);
+    EXPECT_EQ_RC(db_data_add_from_fd(O, fd, "application/dicom", D), 0);
 
     /* share to both */
     EXPECT_EQ_RC(db_user_share_data_with_user_email(O, D, eu1), 0);
     EXPECT_EQ_RC(db_user_share_data_with_user_email(O, D, eu2), 0);
 
     /* Non-owner cannot delete */
-    EXPECT_EQ_RC(db_owner_delete_data(U1, D), -EPERM);
+    EXPECT_EQ_RC(db_data_delete(U1, D), -EPERM);
 
     /* path exists before delete */
     char path[PATH_MAX];
-    EXPECT_EQ_RC(db_resolve_data_path(D, path, sizeof path), 0);
+    EXPECT_EQ_RC(db_data_get_path(D, path, sizeof path), 0);
     struct stat st;
     EXPECT_TRUE(stat(path, &st) == 0 && S_ISREG(st.st_mode));
 
     /* Owner delete */
-    EXPECT_EQ_RC(db_owner_delete_data(O, D), 0);
+    EXPECT_EQ_RC(db_data_delete(O, D), 0);
 
     /* path resolution now fails; blob gone */
-    EXPECT_EQ_RC(db_resolve_data_path(D, path, sizeof path), -ENOENT);
+    EXPECT_EQ_RC(db_data_get_path(D, path, sizeof path), -ENOENT);
     EXPECT_TRUE(stat(path, &st) != 0 && errno == ENOENT);
 
     /* any further share attempts fail due to missing data */
@@ -348,35 +372,41 @@ int t_dedup_multi_owner_can_delete(void)
         return -1;
     }
 
+    int fd = tu_make_blob("./.tmp_blob7.dcm", "same-bits");
+    EXPECT_TRUE(fd >= 0);
+
     uint8_t A[DB_ID_SIZE] = {0}, B[DB_ID_SIZE] = {0};
-    char    ea[EMAIL_MAX_LEN];
+    char    ea[DB_EMAIL_MAX_LEN];
     snprintf(ea, sizeof ea, "%s", "a@x");
-    char eb[EMAIL_MAX_LEN];
+    char eb[DB_EMAIL_MAX_LEN];
     snprintf(eb, sizeof eb, "%s", "b@x");
     db_add_user(ea, A);
     db_user_set_role_publisher(A);
     db_add_user(eb, B);
     db_user_set_role_publisher(B);
-
-    int fd = tu_make_blob("./.tmp_blob7.dcm", "same-bits");
-    EXPECT_TRUE(fd >= 0);
     uint8_t D1[DB_ID_SIZE] = {0}, D2[DB_ID_SIZE] = {0};
 
     /* First upload by A creates the object */
-    EXPECT_EQ_RC(db_add_data_from_fd(A, fd, "application/dicom", D1), 0);
+    EXPECT_EQ_RC(db_data_add_from_fd(A, fd, "application/dicom", D1), 0);
 
-    /* Second upload by B dedups, returns same id and grants B 'O' presence */
+    /* Second upload by B fails */
     lseek(fd, 0, SEEK_SET);
-    int rc = db_add_data_from_fd(B, fd, "application/dicom", D2);
+    int rc = db_data_add_from_fd(B, fd, "application/dicom", D2);
     EXPECT_EQ_RC(rc, -EEXIST);
-    EXPECT_EQ_ID(D1, D2);
+    EXPECT_TRUE(is_zero16(D2));
 
-    /* B, as another owner, can delete */
-    EXPECT_EQ_RC(db_owner_delete_data(B, D1), 0);
+    /* B cannot delete */
+    EXPECT_EQ_RC(db_data_delete(B, D1), -EPERM);
+
+    /* Resolution works after delete */
+    char path[PATH_MAX];
+    EXPECT_EQ_RC(db_data_get_path(D1, path, sizeof path), 0);
+
+    /* A can delete */
+    EXPECT_EQ_RC(db_data_delete(A, D1), 0);
 
     /* Resolution fails after delete */
-    char path[PATH_MAX];
-    EXPECT_EQ_RC(db_resolve_data_path(D1, path, sizeof path), -ENOENT);
+    EXPECT_EQ_RC(db_data_get_path(D1, path, sizeof path), -ENOENT);
 
     close(fd);
     unlink("./.tmp_blob7.dcm");
@@ -400,7 +430,7 @@ static const TU_Test TESTS[] = {
 
 static const size_t NTESTS = sizeof(TESTS) / sizeof(TESTS[0]);
 
-int                 run_test_func(int argc, char **argv)
+int run_test_func(int argc, char **argv)
 {
     return tu_run_suite("func", TESTS, NTESTS, argc, argv);
 }

@@ -1,0 +1,111 @@
+/**
+ * @file db_int.h
+ * @brief 
+ *
+ * @author  Roman Horshkov <roman.horshkov@gmail.com>
+ * @date    2025
+ * (c) 2025
+ */
+
+#ifndef DB_INTERNAL_H
+#define DB_INTERNAL_H
+
+#include <errno.h>
+#include <lmdb.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>  // unlink
+// #include <fcntl.h>
+// #include <inttypes.h>
+// #include <sys/stat.h>
+// #include <time.h>
+// #include "fsutil.h"
+// #include "sha256.h"
+// #include "uuid.h"
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+/****************************************************************************
+ * PUBLIC DEFINES
+ ****************************************************************************
+ */
+
+/* ----------------------- Packed DB records -------------------------------- */
+#define DB_ID_SIZE          16  /* UUID bytes sizes 128 bits */
+#define DB_EMAIL_MAX_LEN    128 /* Maximum length for email strings */
+#define DB_VER              0
+
+/* -------------------------- ACL namespaces -------------------------------- */
+/* Presence-only ACL rtype namespaces */
+#define ACL_RTYPE_OWNER     'O' /* owner */
+#define ACL_RTYPE_SHARE     'S' /* share/reshare */
+#define ACL_RTYPE_USER      'U' /* view */
+
+/* --------------------------- User roles ----------------------------------- */
+#define USER_ROLE_NONE      0u
+#define USER_ROLE_VIEWER    (1u << 0)
+#define USER_ROLE_PUBLISHER (1u << 1)
+
+/****************************************************************************
+ * PUBLIC STRUCTURED VARIABLES
+ ****************************************************************************
+*/
+
+/* Handle for the whole store.  All LMDB databases live under <root>/meta,   */
+/* while content-addressed objects live under <root>/objects/sha256/.. .     */
+struct DB
+{
+    char     root[1024]; /* Root directory */
+    MDB_env *env;        /* LMDB environment */
+
+    MDB_dbi db_user;          /* User DBI */
+    MDB_dbi db_user_email2id; /* Email -> ID DBI */
+    MDB_dbi db_data_meta;     /* Data meta DBI */
+    MDB_dbi db_sha2data;      /* SHA -> data_id DBI */
+
+    /* Presence-only ACLs */
+    MDB_dbi
+        db_acl_fwd; /* key=principal(16)|rtype(1)|data(16), val=uint8_t(1) */
+    MDB_dbi
+        db_acl_by_res; /* key=data(16)|rtype(1), val=principal(16) (dupsort, dupfixed) */
+};
+
+extern struct DB *DB; /* defined in db_env.c */
+
+typedef uint16_t user_role_t;
+
+typedef struct __attribute__((packed))
+{
+    uint8_t     id[DB_ID_SIZE];          /* 16 bytes user id */
+    char        email[DB_EMAIL_MAX_LEN]; /* 128 bytes zero-terminated email */
+    user_role_t role;                    /* 2 bytes role */
+} UserPacked;
+
+typedef struct __attribute__((packed))
+{
+    uint8_t  ver;               /* version for future evolution */
+    uint8_t  sha[32];           /* SHA-256 of stored object */
+    char     mime[32];          /* MIME type */
+    uint64_t size;              /* total bytes */
+    uint64_t created_at;        /* epoch seconds */
+    uint8_t  owner[DB_ID_SIZE]; /* uploader id */
+} DataMeta;
+
+/****************************************************************************
+ * PUBLIC FUNCTIONS DECLARATIONS
+ ****************************************************************************
+*/
+int db_map_mdb_err(int mdb_rc);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* DB_INTERNAL_H */

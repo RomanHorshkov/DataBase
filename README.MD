@@ -76,7 +76,7 @@ All state lives under a **root directory**:
 ```c
 typedef struct __attribute__((packed)) {
     uint8_t    id[16];             // 128-bit random user ID
-    char       email[EMAIL_MAX_LEN]; // zero-terminated email
+    char       email[DB_EMAIL_MAX_LEN]; // zero-terminated email
     uint16_t   role;               // USER_ROLE_NONE / VIEWER / PUBLISHER
 } UserPacked;
 ```
@@ -200,9 +200,9 @@ From `db_store.h`:
 
 ### Data
 
-* `db_add_data_from_fd(owner_id, fd, mime, out_data_id)`
-* `db_resolve_data_path(data_id, out_path, out_sz)`
-* `db_owner_delete_data(owner_id, data_id)`
+* `db_data_add_from_fd(owner_id, fd, mime, out_data_id)`
+* `db_data_get_path(data_id, out_path, out_sz)`
+* `db_data_delete(owner_id, data_id)`
 
 ### Sharing
 

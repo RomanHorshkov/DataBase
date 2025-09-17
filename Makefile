@@ -44,24 +44,27 @@ BIN_DIR   := build/bin
 INCLUDES := -I$(APP_INC) -I$(APP_INC)/cryptography -I$(TEST_INC)
 
 # --- App sources (demo binary) ---
-SRCS := \
-    $(APP_SRC)/main.c \
+CORE_SRCS := \
+    $(APP_SRC)/db_env.c \
+    $(APP_SRC)/db_users.c \
+    $(APP_SRC)/db_data.c \
+    $(APP_SRC)/db_acl.c \
+    $(APP_SRC)/db_interface.c \
     $(APP_SRC)/fsutil.c \
-    $(APP_SRC)/db_store.c \
     $(APP_SRC)/uuid.c \
     $(APP_SRC)/cryptography/sha256.c
 
+SRCS := \
+    $(APP_SRC)/main.c \
+    $(CORE_SRCS)
+
 # --- Tests sources (test binary) ---
-# Link tests against the app objects (minus main.c)
 SRCS_TEST := \
     $(TEST_SRC)/test_main.c \
     $(TEST_SRC)/test_func.c \
     $(TEST_SRC)/test_load.c \
     $(TEST_SRC)/test_utils.c \
-    $(APP_SRC)/fsutil.c \
-    $(APP_SRC)/db_store.c \
-    $(APP_SRC)/uuid.c \
-    $(APP_SRC)/cryptography/sha256.c
+    $(CORE_SRCS)
 
 # --- Flags ---
 CFLAGS  += -O2 -Wall -Wextra -Wshadow -Wconversion -Werror $(INCLUDES) \
@@ -111,20 +114,27 @@ clean:
 # --- Code formatting (clang-format only) ------------------------------------
 CLANG_FORMAT := $(shell command -v clang-format 2>/dev/null)
 
-# File set (prefer git to avoid vendor/build; fallback to find)
+# Prefer git; fall back to find (and avoid build/.git trees)
 FMT_FILES := $(shell \
-  git ls-files '*.c' '*.h' 2>/dev/null || \
-  find . -type f \( -name '*.c' -o -name '*.h' \) \
-      -not -path './build/*' -not -path './.git/*' \
-)
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+    git ls-files '*.c' '*.h'; \
+  else \
+    find . -type f \( -name '*.c' -o -name '*.h' \) \
+      -not -path './build/*' -not -path './.git/*'; \
+  fi )
 
 .PHONY: format
-
 format:
 ifndef CLANG_FORMAT
-	@echo "[fmt] clang-format not found. Install it (e.g., sudo apt-get install -y clang-format)"; false
+	@echo "[fmt] clang-format not found. Install it (e.g., sudo apt-get install -y clang-format)"; exit 1
 else
-	@test -f .clang-format 
-	@$(CLANG_FORMAT) -i $(FMT_FILES)
+	@if [ ! -f .clang-format ]; then \
+	  echo "[fmt] No .clang-format found;"; \
+	fi
+	@if [ -z "$(FMT_FILES)" ]; then \
+	  echo "[fmt] No .c/.h files found to format."; \
+	else \
+	  echo "[fmt] Formatting $(words $(FMT_FILES)) files"; \
+	  printf "%s\0" $(FMT_FILES) | xargs -0 -r $(CLANG_FORMAT) -i; \
+	fi
 endif
-

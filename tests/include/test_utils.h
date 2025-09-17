@@ -49,8 +49,8 @@ typedef struct
 {
     char root[PATH_MAX];
 } Ctx;
-int         tu_setup_store(Ctx* c);
-void        tu_teardown_store(Ctx* c);
+int  tu_setup_store(Ctx* c);
+void tu_teardown_store(Ctx* c);
 
 /* ----------------------------- Helpers ----------------------------------- */
 const char* tu_errname(int rc);
@@ -66,19 +66,19 @@ void        tu_failf(const char* file, int line, const char* fmt, ...);
 
 /* ----------------------------- Output control ---------------------------- */
 /* Preferred printing: writes to configurable sinks (default: stdout/stderr). */
-void        tu_out(const char* fmt, ...);
-void        tu_err(const char* fmt, ...);
-void        tu_io_reset(void);               /* back to stdout/stderr   */
-int         tu_io_set(FILE* out, FILE* err); /* set sinks (no ownership) */
-int         tu_io_set_files(const char* out_path,
-                            const char* err_path); /* owns files */
-uint64_t    tu_dir_size_bytes(const char* path);
+void     tu_out(const char* fmt, ...);
+void     tu_err(const char* fmt, ...);
+void     tu_io_reset(void);               /* back to stdout/stderr   */
+int      tu_io_set(FILE* out, FILE* err); /* set sinks (no ownership) */
+int      tu_io_set_files(const char* out_path,
+                         const char* err_path); /* owns files */
+uint64_t tu_dir_size_bytes(const char* path);
 
 /* Optional: hard redirect process stdio (affects printf). */
-int         tu_redirect_stdio_begin(
-            const char* out_path, const char* err_path,
-            int saved_fd[2]); /* saved_fd[0]=stdout, [1]=stderr */
-int        tu_redirect_stdio_end(int saved_fd[2]);
+int tu_redirect_stdio_begin(
+    const char* out_path, const char* err_path,
+    int saved_fd[2]); /* saved_fd[0]=stdout, [1]=stderr */
+int tu_redirect_stdio_end(int saved_fd[2]);
 
 /* ----------------------------- Assertions -------------------------------- */
 extern int g_failures;

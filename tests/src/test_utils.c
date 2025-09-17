@@ -12,22 +12,22 @@
 #include <stdbool.h>
 
 /* app headers */
-#include "db_store.h"
+#include "db_interface.h"
 #include "fsutil.h"
 
 /* ========================================================================== */
 /*                               Global state                                 */
 /* ========================================================================== */
 
-int                 g_failures  = 0;
+int g_failures = 0;
 
 /* Log sinks (default to stdio; we don’t own them). */
-static FILE*        g_out       = NULL;
-static FILE*        g_err       = NULL;
+static FILE* g_out = NULL;
+static FILE* g_err = NULL;
 
 /* If set via tu_io_set_files, we own and must close. */
-static FILE*        g_out_owned = NULL;
-static FILE*        g_err_owned = NULL;
+static FILE* g_out_owned = NULL;
+static FILE* g_err_owned = NULL;
 
 /* Helpers to get defaulted sinks */
 static inline FILE* SOUT(void)
@@ -149,23 +149,23 @@ char* tu_generate_email_list_seq(size_t n, const char* prefix,
         domain = "@example.com";
     if(!prefix)
         prefix = "user_";
-    char* buf = calloc(n, EMAIL_MAX_LEN);
+    char* buf = calloc(n, DB_EMAIL_MAX_LEN);
     if(!buf)
         return NULL;
     const size_t dom_len = strlen(domain);
     for(size_t i = 0; i < n; ++i)
     {
-        char*  slot = buf + i * EMAIL_MAX_LEN;
+        char*  slot = buf + i * DB_EMAIL_MAX_LEN;
         char   tmp[64];
         int    digits = snprintf(tmp, sizeof tmp, "%zu", i);
         size_t need   = strlen(prefix) + (size_t)digits + dom_len + 1;
-        if(need > EMAIL_MAX_LEN)
+        if(need > DB_EMAIL_MAX_LEN)
         {
             free(buf);
             return NULL;
         }
-        int w = snprintf(slot, EMAIL_MAX_LEN, "%s%zu%s", prefix, i, domain);
-        if(w < 0 || (size_t)w >= EMAIL_MAX_LEN)
+        int w = snprintf(slot, DB_EMAIL_MAX_LEN, "%s%zu%s", prefix, i, domain);
+        if(w < 0 || (size_t)w >= DB_EMAIL_MAX_LEN)
         {
             free(buf);
             return NULL;
@@ -189,7 +189,7 @@ char* tu_generate_email_list_sub_seq(const char* all_emails, size_t M, size_t N)
         return NULL;
     }
 
-    char* out = (char*)calloc(N, EMAIL_MAX_LEN);
+    char* out = (char*)calloc(N, DB_EMAIL_MAX_LEN);
     if(!out)
     {
         free(picks);
@@ -199,11 +199,11 @@ char* tu_generate_email_list_sub_seq(const char* all_emails, size_t M, size_t N)
     for(size_t k = 0; k < N; ++k)
     {
         const size_t i   = picks[k];
-        const char*  src = all_emails + i * EMAIL_MAX_LEN;
-        char*        dst = out + k * EMAIL_MAX_LEN;
-        /* copy up to EMAIL_MAX_LEN including terminator if present */
-        memcpy(dst, src, EMAIL_MAX_LEN);
-        dst[EMAIL_MAX_LEN - 1] = '\0'; /* safety */
+        const char*  src = all_emails + i * DB_EMAIL_MAX_LEN;
+        char*        dst = out + k * DB_EMAIL_MAX_LEN;
+        /* copy up to DB_EMAIL_MAX_LEN including terminator if present */
+        memcpy(dst, src, DB_EMAIL_MAX_LEN);
+        dst[DB_EMAIL_MAX_LEN - 1] = '\0'; /* safety */
     }
 
     free(picks);
@@ -288,6 +288,7 @@ int tu_setup_store(Ctx* c)
     snprintf(c->root, sizeof c->root, "./.testdb_%ld_XXXXXX", (long)getpid());
     if(!mkdtemp(c->root))
         return -1;
+
     const char*        ms     = getenv("LMDB_MAPSIZE_MB");
     unsigned long long map_mb = ms ? strtoull(ms, NULL, 10) : 256ULL;
     if(db_open(c->root, map_mb << 20) != 0)

@@ -7,6 +7,10 @@
         "uuid.h": "c",
         "string.h": "c",
         "fcntl.h": "c",
-        "random.h": "c"
+        "random.h": "c",
+        "cerrno": "c",
+        "sha256.h": "c",
+        "fsutil.h": "c",
+        "rand.h": "c"
     }
 }

@@ -1,14 +1,9 @@
-#ifndef DB_STORE_H
-#define DB_STORE_H
+#ifndef DB_INTERFACE_H
+#define DB_INTERFACE_H
 
-#include <stdint.h>
-#include <stddef.h>
-#include "uuid.h"
-
-#define EMAIL_MAX_LEN 128 /**< Maximum length for email strings */
+#include "db_int.h"
 
 /* ========================================================================= */
-/*                               db_store.h                                  */
 /* ========================================================================= */
 /* LMDB-backed database store API header (presence-only ACL O/S/U).          */
 /* ========================================================================= */
@@ -19,12 +14,14 @@
  * @param mapsize_bytes LMDB map size in bytes.
  * @return 0 on success, -EIO on error.
  */
-int  db_open(const char* root_dir, uint64_t mapsize_bytes);
+int db_open(const char* root_dir, uint64_t mapsize_bytes);
 
 /**
  * @brief Close the environment and free the global handle.
  */
 void db_close(void);
+
+/* ------------------------------ Users ----------------------------------- */
 
 /**
  * @brief Insert a user if not already present. If present, copy id into out_id.
@@ -32,23 +29,9 @@ void db_close(void);
  * @param out_id Output user ID.
  * @return 0 on insertion, -EEXIST if already existed, -EINVAL bad input, -EIO DB error.
  */
-int  db_add_user(const char email[EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE]);
+int db_add_user(const char email[DB_EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE]);
 
-/**
- * @brief Ingest a blob from 'src_fd', computing SHA-256 while streaming it.
- *        Deduplicates by content; grants 'O' presence to the uploader.
- * @param owner Uploader ID.
- * @param src_fd Source file descriptor.
- * @param mime MIME type.
- * @param out_data_id Output data ID.
- * @return 0 on success, -EEXIST if content existed (id returned), -EPERM if not publisher,
- *         -ENOENT if owner not found, -EINVAL bad args, -EIO on error.
- */
-int db_add_data_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd, const char* mime,
-                        uint8_t out_data_id[DB_ID_SIZE]);
-
-/* ------------------------------ Users ----------------------------------- */
-
+int db_add_users(size_t n_users, const char email_flat[]);
 /**
  * @brief Look up a user by id and optionally return email.
  * @param id User ID.
@@ -56,7 +39,7 @@ int db_add_data_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd, const char* mime,
  * @return 0 on success, -ENOENT if not found, -EIO on DB error.
  */
 int db_user_find_by_id(const uint8_t id[DB_ID_SIZE],
-                       char          out_email[EMAIL_MAX_LEN]);
+                       char          out_email[DB_EMAIL_MAX_LEN]);
 
 /**
  * @brief Look up a user id by email.
@@ -64,7 +47,7 @@ int db_user_find_by_id(const uint8_t id[DB_ID_SIZE],
  * @param out_id Output user ID.
  * @return 0 on success, -ENOENT if not found, -EIO on DB error.
  */
-int db_user_find_by_email(const char email[EMAIL_MAX_LEN],
+int db_user_find_by_email(const char email[DB_EMAIL_MAX_LEN],
                           uint8_t    out_id[DB_ID_SIZE]);
 
 /**
@@ -76,7 +59,7 @@ int db_user_find_by_email(const char email[EMAIL_MAX_LEN],
  */
 int db_user_share_data_with_user_email(uint8_t    owner[DB_ID_SIZE],
                                        uint8_t    data_id[DB_ID_SIZE],
-                                       const char email[EMAIL_MAX_LEN]);
+                                       const char email[DB_EMAIL_MAX_LEN]);
 
 /**
  * @brief Update a user's role in the DB to viewer.
@@ -116,7 +99,7 @@ int db_user_list_publishers(uint8_t* out_ids, size_t* inout_count_max);
  */
 int db_user_list_viewers(uint8_t* out_ids, size_t* inout_count_max);
 
-/* --------------------------- Blobs & data ------------------------------- */
+/* --------------------------- Data ------------------------------- */
 
 /**
  * @brief Given a data id, resolve the absolute filesystem path of its blob.
@@ -125,8 +108,8 @@ int db_user_list_viewers(uint8_t* out_ids, size_t* inout_count_max);
  * @param out_sz Output buffer size.
  * @return 0 on success, -ENOENT if meta missing, -EINVAL bad args, -EIO on path error.
  */
-int db_resolve_data_path(uint8_t img_id[DB_ID_SIZE], char* out_path,
-                         unsigned long out_sz);
+int db_data_get_path(uint8_t img_id[DB_ID_SIZE], char* out_path,
+                     unsigned long out_sz);
 
 /**
  * @brief Owner-only delete that removes: forward ACLs, reverse ACLs, sha->data,
@@ -135,16 +118,35 @@ int db_resolve_data_path(uint8_t img_id[DB_ID_SIZE], char* out_path,
  * @param data_id Data to delete.
  * @return 0 on success, -EPERM if actor not owner, -ENOENT if missing, -EIO otherwise.
  */
-int db_owner_delete_data(const uint8_t actor[DB_ID_SIZE],
-                         const uint8_t data_id[DB_ID_SIZE]);
+int db_data_delete(const uint8_t actor[DB_ID_SIZE],
+                   const uint8_t data_id[DB_ID_SIZE]);
+
+/**
+ * @brief Ingest a blob from 'src_fd', computing SHA-256 while streaming it.
+ *        Deduplicates by content; grants 'O' presence to the uploader.
+ * @param owner Uploader ID.
+ * @param src_fd Source file descriptor.
+ * @param mime MIME type.
+ * @param out_data_id Output data ID.
+ * @return 0 on success, -EEXIST if content existed (id returned), -EPERM if not publisher,
+ *         -ENOENT if owner not found, -EINVAL bad args, -EIO on error.
+ */
+int db_data_add_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd, const char* mime,
+                        uint8_t out_data_id[DB_ID_SIZE]);
+
+int db_data_get_meta(uint8_t data_id[DB_ID_SIZE], DataMeta* out_meta);
+int db_data_get_path(uint8_t data_id[DB_ID_SIZE], char* out_path,
+                     unsigned long out_sz);
 
 /* ACL helpers and operations (reserved for future use) */
 /*
- * int db_revoke_data_from_user_email(uint8_t owner[DB_ID_SIZE], uint8_t data_id[DB_ID_SIZE], const char email[EMAIL_MAX_LEN]);
+ * int db_revoke_data_from_user_email(uint8_t owner[DB_ID_SIZE], uint8_t data_id[DB_ID_SIZE], const char email[DB_EMAIL_MAX_LEN]);
  * int db_revoke_data_from_user_id(uint8_t owner[DB_ID_SIZE], uint8_t data_id[DB_ID_SIZE], const uint8_t user_id[DB_ID_SIZE]);
  */
+
+/* --------------------------- LMDB ENV ------------------------------- */
 
 int db_env_metrics(uint64_t* used_bytes, uint64_t* mapsize_bytes,
                    uint32_t* page_size);
 
-#endif /* DB_STORE_H */
+#endif /* DB_INTERFACE_H */

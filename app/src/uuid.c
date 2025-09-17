@@ -2,18 +2,18 @@
 #include <stdatomic.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <string.h>
-#include <stdio.h>
-#include <time.h>
 #if defined(__linux__)
 /* try getrandom first (non-blocking semantics with urandom pool after init)*/
 #    include <sys/random.h>
 #endif
 
+#include "db_int.h"
+
 /* Global state: [ ms_since_epoch (high 52 bits) | seq (low 12 bits) ] */
 static _Atomic uint64_t g_v7_state = 0;
 
-static inline uint64_t realtime_ms(void){
+static inline uint64_t realtime_ms(void)
+{
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     return (uint64_t)ts.tv_sec * 1000u + (uint64_t)(ts.tv_nsec / 1000000u);
@@ -49,7 +49,7 @@ static int fill_random(void* p, size_t n)
     return 0;
 }
 
-int uuid_v4(uint8_t out[DB_ID_SIZE])
+int uuid_v4(uint8_t out[UUID_BYTES_SIZE])
 {
     if(fill_random(out, 16) != 0)
         return -1;
@@ -58,14 +58,14 @@ int uuid_v4(uint8_t out[DB_ID_SIZE])
     return 0;
 }
 
-
-int uuid_v7(uint8_t out[DB_ID_SIZE])
+int uuid_v7(uint8_t out[UUID_BYTES_SIZE])
 {
     /* Reserve strictly increasing (ms,seq) using a CAS loop */
     uint64_t use_ms;
     uint16_t seq12;
 
-    for (;;){
+    for(;;)
+    {
         uint64_t now_ms = realtime_ms();
 
         uint64_t prev = atomic_load_explicit(&g_v7_state, memory_order_relaxed);
@@ -76,21 +76,26 @@ int uuid_v7(uint8_t out[DB_ID_SIZE])
         use_ms = (now_ms > prev_ms) ? now_ms : prev_ms;
 
         /* If same ms as previous, bump sequence; otherwise start at 0 */
-        uint16_t next_seq = (use_ms == prev_ms) ? (uint16_t)(prev_seq + 1u) : 0u;
+        uint16_t next_seq =
+            (use_ms == prev_ms) ? (uint16_t)(prev_seq + 1u) : 0u;
 
         /* If the 12-bit space overflows within the same ms, wait for next ms */
-        if (use_ms == prev_ms && next_seq == 0u) {
+        if(use_ms == prev_ms && next_seq == 0u)
+        {
             /* Busy-wait until the clock ticks to the next millisecond */
-            do { now_ms = realtime_ms(); } while (now_ms <= prev_ms);
+            do
+            {
+                now_ms = realtime_ms();
+            } while(now_ms <= prev_ms);
             /* Try again; next iteration will see use_ms > prev_ms and seq=0 */
             continue;
         }
 
         uint64_t next = (use_ms << 12) | (uint64_t)next_seq;
 
-        if (atomic_compare_exchange_weak_explicit(
-                &g_v7_state, &prev, next,
-                memory_order_acq_rel, memory_order_relaxed))
+        if(atomic_compare_exchange_weak_explicit(&g_v7_state, &prev, next,
+                                                 memory_order_acq_rel,
+                                                 memory_order_relaxed))
         {
             seq12 = next_seq;
             break; /* we own (use_ms, seq12) */
@@ -100,7 +105,7 @@ int uuid_v7(uint8_t out[DB_ID_SIZE])
 
     /* Random 62 bits for the tail (rb) */
     uint8_t rb[8];
-    if (fill_random(rb, sizeof rb) != 0)
+    if(fill_random(rb, sizeof rb) != 0)
         return -1;
 
     /* Layout per UUIDv7 (RFC 4122bis):
@@ -114,8 +119,8 @@ int uuid_v7(uint8_t out[DB_ID_SIZE])
     out[1] = (uint8_t)((use_ms >> 32) & 0xFF);
     out[2] = (uint8_t)((use_ms >> 24) & 0xFF);
     out[3] = (uint8_t)((use_ms >> 16) & 0xFF);
-    out[4] = (uint8_t)((use_ms >>  8) & 0xFF);
-    out[5] = (uint8_t)((use_ms >>  0) & 0xFF);
+    out[4] = (uint8_t)((use_ms >> 8) & 0xFF);
+    out[5] = (uint8_t)((use_ms >> 0) & 0xFF);
 
     /* version(7) | high 4 bits of seq */
     out[6] = (uint8_t)(0x70 | ((seq12 >> 8) & 0x0F));
@@ -135,7 +140,7 @@ int uuid_v7(uint8_t out[DB_ID_SIZE])
     return 0;
 }
 
-void uuid_to_hex(uint8_t id[DB_ID_SIZE], char out32[33])
+void uuid_to_hex(uint8_t id[UUID_BYTES_SIZE], char out32[33])
 {
     static const char* h = "0123456789abcdef";
     for(int i = 0; i < 16; ++i)
