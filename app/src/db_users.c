@@ -37,7 +37,8 @@
 static int db_user_set_role(uint8_t userId[DB_ID_SIZE], user_role_t role);
 
 /* qsort comparator for 16-byte ids */
-static int cmp_id16(const void* a, const void* b) {
+static int cmp_id16(const void *a, const void *b)
+{
     return memcmp(a, b, DB_ID_SIZE);
 }
 
@@ -75,71 +76,84 @@ int db_user_find_by_id(const uint8_t id[DB_ID_SIZE], char out[DB_EMAIL_MAX_LEN])
 
 int db_user_find_by_ids(size_t n_users, const uint8_t ids_flat[])
 {
-    if(n_users == 0 || !ids_flat) return -EINVAL;
+    if(n_users == 0 || !ids_flat)
+        return -EINVAL;
 
-    MDB_txn* txn = NULL;
-    int mrc = mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn);
-    if(mrc != MDB_SUCCESS) return db_map_mdb_err(mrc);
+    MDB_txn *txn = NULL;
+    int      mrc = mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn);
+    if(mrc != MDB_SUCCESS)
+        return db_map_mdb_err(mrc);
 
-    /* Try fast path: sort a local copy */
-    uint8_t* ids_sorted = (uint8_t*)malloc(n_users * DB_ID_SIZE);
-    if(ids_sorted) {
+    /* Try fast path: sort local copy */
+    uint8_t *ids_sorted = (uint8_t *)malloc(n_users * DB_ID_SIZE);
+    if(ids_sorted)
+    {
         memcpy(ids_sorted, ids_flat, n_users * DB_ID_SIZE);
-
         qsort(ids_sorted, n_users, DB_ID_SIZE, cmp_id16);
 
-        /* optional: skip duplicate target IDs to avoid redundant work */
+        /* de-dup in place */
         size_t uniq = 0;
-        for(size_t i = 0; i < n_users; ++i) {
-            if(uniq == 0 || memcmp(ids_sorted + (uniq-1)*DB_ID_SIZE,
-                                   ids_sorted + i*DB_ID_SIZE, DB_ID_SIZE) != 0) {
+        for(size_t i = 0; i < n_users; ++i)
+        {
+            if(uniq == 0 ||
+               memcmp(ids_sorted + (uniq - 1) * DB_ID_SIZE,
+                      ids_sorted + i * DB_ID_SIZE, DB_ID_SIZE) != 0)
+            {
                 if(uniq != i)
-                    memcpy(ids_sorted + uniq*DB_ID_SIZE,
-                           ids_sorted + i*DB_ID_SIZE, DB_ID_SIZE);
+                    memcpy(ids_sorted + uniq * DB_ID_SIZE,
+                           ids_sorted + i * DB_ID_SIZE, DB_ID_SIZE);
                 ++uniq;
             }
         }
 
-        MDB_cursor* cur = NULL;
-        if(mdb_cursor_open(txn, DB->db_user, &cur) != MDB_SUCCESS) {
+        MDB_cursor *cur = NULL;
+        if(mdb_cursor_open(txn, DB->db_user, &cur) != MDB_SUCCESS)
+        {
             free(ids_sorted);
             mdb_txn_abort(txn);
             return -EIO;
         }
 
         MDB_val k = {0}, v = {0};
-        int rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST);
-        if(rc == MDB_NOTFOUND) { /* empty table but we have ids */
+        int     rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST);
+        if(rc == MDB_NOTFOUND)
+        {
             mdb_cursor_close(cur);
             free(ids_sorted);
             mdb_txn_abort(txn);
-            return -ENOENT;
+            return db_map_mdb_err(rc);
         }
-        if(rc != MDB_SUCCESS) {
+        if(rc != MDB_SUCCESS)
+        {
             mdb_cursor_close(cur);
             free(ids_sorted);
             mdb_txn_abort(txn);
-            return -EIO;
+            return db_map_mdb_err(rc);
         }
 
-        for(size_t i = 0; i < uniq; ++i) {
-            const uint8_t* want = ids_sorted + i*DB_ID_SIZE;
+        for(size_t i = 0; i < uniq; ++i)
+        {
+            const uint8_t *want = ids_sorted + i * DB_ID_SIZE;
 
             /* advance until current key >= want */
-            for(;;) {
+            for(;;)
+            {
                 int cmp = (k.mv_size == DB_ID_SIZE)
-                          ? memcmp(k.mv_data, want, DB_ID_SIZE)
-                          : (k.mv_size < DB_ID_SIZE ? -1 : 1);
-                if(cmp >= 0) break;
+                              ? memcmp(k.mv_data, want, DB_ID_SIZE)
+                              : (k.mv_size < DB_ID_SIZE ? -1 : 1);
+                if(cmp >= 0)
+                    break;
 
                 rc = mdb_cursor_get(cur, &k, &v, MDB_NEXT);
-                if(rc == MDB_NOTFOUND) {
+                if(rc == MDB_NOTFOUND)
+                {
                     mdb_cursor_close(cur);
                     free(ids_sorted);
                     mdb_txn_abort(txn);
                     return -ENOENT;
                 }
-                if(rc != MDB_SUCCESS) {
+                if(rc != MDB_SUCCESS)
+                {
                     mdb_cursor_close(cur);
                     free(ids_sorted);
                     mdb_txn_abort(txn);
@@ -147,23 +161,28 @@ int db_user_find_by_ids(size_t n_users, const uint8_t ids_flat[])
                 }
             }
 
-            if(k.mv_size != DB_ID_SIZE || memcmp(k.mv_data, want, DB_ID_SIZE) != 0) {
+            if(k.mv_size != DB_ID_SIZE ||
+               memcmp(k.mv_data, want, DB_ID_SIZE) != 0)
+            {
                 mdb_cursor_close(cur);
                 free(ids_sorted);
                 mdb_txn_abort(txn);
                 return -ENOENT;
             }
-            if(v.mv_size != sizeof(UserPacked)) {
+            if(v.mv_size != sizeof(UserPacked))
+            {
                 mdb_cursor_close(cur);
                 free(ids_sorted);
                 mdb_txn_abort(txn);
                 return -EIO;
             }
 
-            /* small prefetch; ok if it hits NOTFOUND on the very last key */
-            if(i + 1 < uniq) {
+            /* prefetch for next iteration (optional) */
+            if(i + 1 < uniq)
+            {
                 rc = mdb_cursor_get(cur, &k, &v, MDB_NEXT);
-                if(rc != MDB_SUCCESS && rc != MDB_NOTFOUND) {
+                if(rc != MDB_SUCCESS && rc != MDB_NOTFOUND)
+                {
                     mdb_cursor_close(cur);
                     free(ids_sorted);
                     mdb_txn_abort(txn);
@@ -174,24 +193,34 @@ int db_user_find_by_ids(size_t n_users, const uint8_t ids_flat[])
 
         mdb_cursor_close(cur);
         free(ids_sorted);
-
-        mrc = mdb_txn_commit(txn);
-        if(mrc != MDB_SUCCESS) { mdb_txn_abort(txn); return -EIO; }
+        mdb_txn_abort(txn); /* read-only: abort, don’t commit */
         return 0;
     }
 
-    /* Fallback: no memory → individual lookups (still correct). */
-    for(size_t i = 0; i < n_users; ++i) {
-        const uint8_t* id = &ids_flat[i*DB_ID_SIZE];
-        MDB_val k = { .mv_size = DB_ID_SIZE, .mv_data = (void*)id };
-        MDB_val v = {0};
-        mrc = mdb_get(txn, DB->db_user, &k, &v);
-        if(mrc == MDB_NOTFOUND) { mdb_txn_abort(txn); return -ENOENT; }
-        if(mrc != MDB_SUCCESS)  { mdb_txn_abort(txn); return db_map_mdb_err(mrc); }
-        if(v.mv_size != sizeof(UserPacked)) { mdb_txn_abort(txn); return -EIO; }
+    /* Fallback: individual lookups */
+    for(size_t i = 0; i < n_users; ++i)
+    {
+        const uint8_t *id = &ids_flat[i * DB_ID_SIZE];
+        MDB_val        k  = {.mv_size = DB_ID_SIZE, .mv_data = (void *)id};
+        MDB_val        v  = {0};
+        mrc               = mdb_get(txn, DB->db_user, &k, &v);
+        if(mrc == MDB_NOTFOUND)
+        {
+            mdb_txn_abort(txn);
+            return -ENOENT;
+        }
+        if(mrc != MDB_SUCCESS)
+        {
+            mdb_txn_abort(txn);
+            return db_map_mdb_err(mrc);
+        }
+        if(v.mv_size != sizeof(UserPacked))
+        {
+            mdb_txn_abort(txn);
+            return -EIO;
+        }
     }
-    mrc = mdb_txn_commit(txn);
-    if(mrc != MDB_SUCCESS) { mdb_txn_abort(txn); return -EIO; }
+    mdb_txn_abort(txn); /* read-only: abort */
     return 0;
 }
 
@@ -237,6 +266,9 @@ int db_add_user(const char email[DB_EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
     if(elen == 0)
         return -EINVAL;
 
+    unsigned db_email_put_flags = MDB_NOOVERWRITE | MDB_RESERVE;
+    unsigned db_user_put_flags  = MDB_NOOVERWRITE | MDB_RESERVE | MDB_APPEND;
+retry_chunk:
     /* Insert in db_email2id, if not already exists insert in the main */
     MDB_txn *txn = NULL;
 
@@ -248,21 +280,25 @@ int db_add_user(const char email[DB_EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
     MDB_val k_email2id = {.mv_size = elen, .mv_data = (void *)email};
     MDB_val v_email2id = {.mv_size = DB_ID_SIZE, .mv_data = NULL};
 
-    unsigned db_email_put_flags = MDB_NOOVERWRITE | MDB_RESERVE;
     mrc = mdb_put(txn, DB->db_user_email2id, &k_email2id, &v_email2id,
                   db_email_put_flags);
-
+    if(mrc == MDB_MAP_FULL)
+    {
+        mdb_txn_abort(txn);
+        int grc = db_env_mapsize_expand(); /* grow */
+        if(grc != 0)
+            return db_map_mdb_err(grc); /* stop if grow failed */
+        goto retry_chunk;               /* retry whole chunk */
+    }
     if(mrc != MDB_SUCCESS)
     {
         mdb_txn_abort(txn);
         return db_map_mdb_err(mrc);
     }
-
     /* id -> user */
     MDB_val k_id = {.mv_size = DB_ID_SIZE, .mv_data = NULL};
     MDB_val v_up = {.mv_size = sizeof(UserPacked), .mv_data = NULL};
     /* Only use MDB_APPEND if keys are monotonic (e.g., UUIDv7). */
-    unsigned db_user_put_flags = MDB_NOOVERWRITE | MDB_RESERVE | MDB_APPEND;
 
     /* Generate unique id */
     uint8_t id[DB_ID_SIZE];
@@ -276,7 +312,14 @@ int db_add_user(const char email[DB_EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
             /* ultra-rare: regenerate and retry */
             continue;
         }
-
+        if(mrc == MDB_MAP_FULL)
+        {
+            mdb_txn_abort(txn);
+            int grc = db_env_mapsize_expand(); /* grow */
+            if(grc != 0)
+                return db_map_mdb_err(grc); /* stop if grow failed */
+            goto retry_chunk;               /* retry whole chunk */
+        }
         if(mrc != MDB_SUCCESS)
         {
             mdb_txn_abort(txn);
@@ -304,10 +347,18 @@ int db_add_user(const char email[DB_EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
     /* finalize email->id by writing the freshly created id */
     memcpy(v_email2id.mv_data, id, DB_ID_SIZE);
 
-    if(mdb_txn_commit(txn) != MDB_SUCCESS)
+    mrc = mdb_txn_commit(txn);
+    if(mrc == MDB_MAP_FULL)
     {
-        mdb_txn_abort(txn);
-        return -EIO;
+        int grc = db_env_mapsize_expand();
+        if(grc != 0)
+            return db_map_mdb_err(grc); /* stop if grow failed */
+        goto retry_chunk;
+    }
+    if(mrc != MDB_SUCCESS)
+    {
+        /* txn is already aborted/freed on commit error */
+        return db_map_mdb_err(mrc);
     }
     if(out_id)
         memcpy(out_id, id, DB_ID_SIZE);
@@ -328,6 +379,7 @@ int db_add_users(size_t     n_users,
     uint8_t last_id[DB_ID_SIZE] = {0}; /* monotonic guard */
     int     have_last           = 0;
 
+retry_chunk:
     MDB_txn *txn = NULL;
     int      mrc = mdb_txn_begin(DB->env, NULL, 0, &txn);
     if(mrc != MDB_SUCCESS)
@@ -349,7 +401,17 @@ int db_add_users(size_t     n_users,
 
         mrc = mdb_put(txn, DB->db_user_email2id, &k_e, &v_e, email_put_flags);
         if(mrc == MDB_KEYEXIST)
-            continue; /* duplicate email: skip */
+        {
+            continue; /* duplicate: skip this email */
+        }
+        if(mrc == MDB_MAP_FULL)
+        {
+            mdb_txn_abort(txn);
+            int grc = db_env_mapsize_expand(); /* grow */
+            if(grc != 0)
+                return db_map_mdb_err(grc); /* stop if grow failed */
+            goto retry_chunk; /* retry whole chunk */
+        }
         if(mrc != MDB_SUCCESS)
         {
             mdb_txn_abort(txn);
@@ -363,16 +425,23 @@ int db_add_users(size_t     n_users,
             uuid_v7(id);
             if(!have_last || memcmp(id, last_id, DB_ID_SIZE) > 0)
                 break;
-            /* extremely rare same/retro key → regenerate; or add a bump() here if you have one */
+            /* extremely rare same/retro key → regenerate; or add a bump() */
         }
 
         MDB_val k_u = {.mv_size = DB_ID_SIZE, .mv_data = id};
         MDB_val v_u = {.mv_size = sizeof(UserPacked), .mv_data = NULL};
 
         mrc = mdb_put(txn, DB->db_user, &k_u, &v_u, user_put_flags);
+        if(mrc == MDB_MAP_FULL)
+        {
+            mdb_txn_abort(txn);
+            int grc = db_env_mapsize_expand(); /* grow */
+            if(grc != 0)
+                return db_map_mdb_err(grc); /* stop if grow failed */
+            goto retry_chunk;               /* retry whole chunk */
+        }
         if(mrc != MDB_SUCCESS)
         {
-            /* MDB_KEYEXIST unbelievably rare */
             mdb_txn_abort(txn);
             return db_map_mdb_err(mrc);
         }
@@ -398,6 +467,14 @@ int db_add_users(size_t     n_users,
     if(mrc != MDB_SUCCESS)
     {
         mdb_txn_abort(txn);
+        if(mrc == MDB_MAP_FULL)
+        {
+            int grc = db_env_mapsize_expand(); /* grow */
+            if(grc != 0)
+                return db_map_mdb_err(grc); /* hit max? bubble up */
+            goto retry_chunk;        /* 3) retry whole chunk */
+        }
+
         return db_map_mdb_err(mrc);
     }
     return 0;
@@ -521,24 +598,13 @@ int db_user_share_data_with_user_email(uint8_t    owner[DB_ID_SIZE],
 
     uint8_t target_user_id[DB_ID_SIZE] = {0};
 
+retry_chunk:
     /* Resolve recipient */
     {
         int frc = db_user_find_by_email(email, target_user_id);
         if(frc != 0)
             return frc; /* -ENOENT / -EIO / -EINVAL */
     }
-
-    /* Role check stays (coarse global permissions) */
-    // {
-    //     user_role_t owner_role = 0;
-    //     int         prc        = db_user_get_role(owner, &owner_role);
-    //     if(prc == -ENOENT)
-    //         return -ENOENT;
-    //     if(prc != 0)
-    //         return -EIO;
-    //     if(owner_role != USER_ROLE_PUBLISHER && owner_role != USER_ROLE_VIEWER)
-    //         return -EPERM;
-    // }
 
     /* One RW transaction for existence check + ACL checks + grant */
     MDB_txn *txn;
@@ -576,10 +642,18 @@ int db_user_share_data_with_user_email(uint8_t    owner[DB_ID_SIZE],
         return -EIO;
     }
 
-    if(mdb_txn_commit(txn) != MDB_SUCCESS)
+    int mrc = mdb_txn_commit(txn);
+    if(mrc == MDB_MAP_FULL)
     {
-        mdb_txn_abort(txn);
-        return -EIO;
+        int grc = db_env_mapsize_expand();
+        if(grc != 0)
+            return db_map_mdb_err(grc);
+        goto retry_chunk;
+    }
+    if(mrc != MDB_SUCCESS)
+    {
+        /* txn is already aborted/freed on commit error */
+        return db_map_mdb_err(mrc);
     }
     return 0;
 }
@@ -603,7 +677,7 @@ static int db_user_set_role(uint8_t userId[DB_ID_SIZE], user_role_t role)
     if(role != USER_ROLE_VIEWER && role != USER_ROLE_PUBLISHER &&
        role != USER_ROLE_NONE)
         return -EINVAL;
-
+retry_chunk:
     MDB_txn    *txn;
     MDB_cursor *cur;
     MDB_val     k    = {.mv_size = DB_ID_SIZE, .mv_data = userId};
@@ -653,10 +727,18 @@ static int db_user_set_role(uint8_t userId[DB_ID_SIZE], user_role_t role)
 
     mdb_cursor_close(cur);
 
-    if(mdb_txn_commit(txn) != MDB_SUCCESS)
+    int mrc = mdb_txn_commit(txn);
+    if(mrc == MDB_MAP_FULL)
     {
-        mdb_txn_abort(txn);
-        return -EIO;
+        int grc = db_env_mapsize_expand();
+        if(grc != 0)
+            return db_map_mdb_err(grc);
+        goto retry_chunk;
+    }
+    if(mrc != MDB_SUCCESS)
+    {
+        /* txn is already aborted/freed on commit error */
+        return db_map_mdb_err(mrc);
     }
     return 0;
 }

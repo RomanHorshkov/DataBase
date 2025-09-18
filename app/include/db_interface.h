@@ -14,7 +14,7 @@
  * @param mapsize_bytes LMDB map size in bytes.
  * @return 0 on success, -EIO on error.
  */
-int db_open(const char* root_dir, uint64_t mapsize_bytes);
+int db_open(const char* root_dir, size_t mapsize_bytes);
 
 /**
  * @brief Close the environment and free the global handle.
@@ -37,7 +37,8 @@ int db_add_user(const char email[DB_EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE]);
  * @param email_flat User emails flat array
  * @return 0 on insertion, -EEXIST if already existed, -EINVAL bad input, -EIO DB error.
  */
-int db_add_users(size_t n_users, const char email_flat[n_users*DB_EMAIL_MAX_LEN]);
+int db_add_users(size_t     n_users,
+                 const char email_flat[n_users * DB_EMAIL_MAX_LEN]);
 
 /**
  * @brief Look up a user by id and optionally return email.

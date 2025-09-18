@@ -16,12 +16,10 @@
  */
 
 /* Logical names of LMDB sub-databases */
-#define DB_USER "user" /* key=id(16)                 , val=UserPacked */
-#define DB_USER_EMAIL2ID \
-    "user_email2id" /* key=email                  , val=id(16)     */
-#define DB_DATA_META \
-    "data_meta"                /* key=data_id(16)            , val=DataMeta   */
-#define DB_SHA2DATA "sha2data" /* key=sha(32)                , val=data_id(16)*/
+#define DB_USER          "user"          /* key=id(16), val=UserPacked */
+#define DB_USER_EMAIL2ID "user_email2id" /* key=email , val=id(16) */
+#define DB_DATA_META     "data_meta"     /* key=data_id(16) , val=DataMeta */
+#define DB_SHA2DATA      "sha2data"      /* key=sha(32) , val=data_id(16) */
 
 /* Presence-only ACL DBs */
 #define DB_ACL_FWD \
@@ -48,6 +46,8 @@ struct DB *DB = NULL;
  ****************************************************************************
  */
 static int db_data_ensure_layout(const char *root);
+static int db_env_setup_and_open(const char *root_dir, size_t mapsize_bytes);
+static int db_env_mapsize_set(uint64_t mapsize_bytes);
 
 /****************************************************************************
  * PUBLIC FUNCTIONS DEFINITIONS
@@ -55,7 +55,7 @@ static int db_data_ensure_layout(const char *root);
  */
 
 /** Initialize the environment, create sub-databases. */
-int db_open(const char *root_dir, uint64_t mapsize_bytes)
+int db_open(const char *root_dir, size_t mapsize_bytes)
 {
     if(!root_dir || mapsize_bytes == 0)
         return -EINVAL;
@@ -76,28 +76,14 @@ int db_open(const char *root_dir, uint64_t mapsize_bytes)
         DB = NULL;
         return -EIO;
     }
-
-    mdb_env_set_maxdbs(DB->env, 32);
-    mdb_env_set_mapsize(DB->env, (size_t)mapsize_bytes);
-
     char metadir[2048];
     snprintf(metadir, sizeof metadir, "%s/meta", root_dir);
-    if(mdb_env_open(DB->env, metadir, 0, 0770) != MDB_SUCCESS)
-    {
-        mdb_env_close(DB->env);
-        free(DB);
-        DB = NULL;
-        return -EIO;
-    }
+    if(db_env_setup_and_open(metadir, mapsize_bytes) != MDB_SUCCESS)
+        goto fail_env;
 
     MDB_txn *txn = NULL;
     if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS)
-    {
-        mdb_env_close(DB->env);
-        free(DB);
-        DB = NULL;
-        return -EIO;
-    }
+        goto fail_env;
 
     if(mdb_dbi_open(txn, DB_USER, MDB_CREATE, &DB->db_user) != MDB_SUCCESS)
         goto fail;
@@ -144,6 +130,16 @@ void db_close(void)
     DB = NULL;
 }
 
+int db_env_mapsize_expand(void)
+{
+    if(!DB || !DB->env)
+        return -EIO;
+    uint64_t desired = DB->map_size_bytes * 2;
+    if(desired > DB->map_size_bytes_max)
+        return MDB_MAP_FULL;
+    return db_env_mapsize_set(desired);
+}
+
 int db_env_metrics(uint64_t *used, uint64_t *mapsize, uint32_t *psize)
 {
     if(!DB || !DB->env)
@@ -182,6 +178,10 @@ int db_map_mdb_err(int mdb_rc)
             return -EEXIST;
             break;
 
+        case MDB_MAP_FULL:
+            return -ENOMEM;
+            break;
+
         default:
             return -EIO;
             break;
@@ -210,4 +210,41 @@ static int db_data_ensure_layout(const char *root)
         return -EIO;
 
     return 0;
+}
+
+static int db_env_setup_and_open(const char *metadir, size_t mapsize_bytes)
+{
+    if(!DB || !DB->env)
+        return -EIO;
+
+    DB->map_size_bytes = mapsize_bytes;
+
+    const char *mx         = getenv("LMDB_MAPSIZE_MAX_MB");
+    DB->map_size_bytes_max = mx ? (uint64_t)strtoull(mx, NULL, 10) << 20
+                                : (uint64_t)mapsize_bytes * 8;
+
+    int mrc = mdb_env_set_maxdbs(DB->env, 16);
+    if(mrc != MDB_SUCCESS)
+        return mrc;
+
+    mrc = db_env_mapsize_set(DB->map_size_bytes);
+    if(mrc != MDB_SUCCESS)
+        return mrc;
+
+    mrc = mdb_env_open(DB->env, metadir, 0, 0770);
+    if(mrc != MDB_SUCCESS)
+        return mrc;
+
+    return 0;
+}
+
+static int db_env_mapsize_set(uint64_t mapsize_bytes)
+{
+    int mrc = mdb_env_set_mapsize(DB->env, (size_t)mapsize_bytes);
+    if(mrc == MDB_SUCCESS)
+    {
+        DB->map_size_bytes = mapsize_bytes;
+        return 0;
+    }
+    return mrc;
 }

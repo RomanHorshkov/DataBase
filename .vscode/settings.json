@@ -11,6 +11,7 @@
         "cerrno": "c",
         "sha256.h": "c",
         "fsutil.h": "c",
-        "rand.h": "c"
+        "rand.h": "c",
+        "db_int.h": "c"
     }
 }

@@ -107,7 +107,7 @@ test: $(BIN_DIR)/db_tests
 	./$(BIN_DIR)/db_tests $(RUNARGS)
 
 clean:
-	@rm -rf build && rm -rf med/ && rm -f blob_*
+	@rm -rf build && rm -rf med/ && rm -f blob_* && rm -rf .test*
 
 
 # --- Code formatting (clang-format only) ------------------------------------

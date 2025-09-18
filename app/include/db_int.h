@@ -75,6 +75,10 @@ struct DB
         db_acl_fwd; /* key=principal(16)|rtype(1)|data(16), val=uint8_t(1) */
     MDB_dbi
         db_acl_by_res; /* key=data(16)|rtype(1), val=principal(16) (dupsort, dupfixed) */
+
+    /* Stats and health */
+    size_t map_size_bytes;
+    size_t map_size_bytes_max;
 };
 
 extern struct DB *DB; /* defined in db_env.c */
@@ -103,6 +107,7 @@ typedef struct __attribute__((packed))
  ****************************************************************************
 */
 int db_map_mdb_err(int mdb_rc);
+int db_env_mapsize_expand(void);
 
 #ifdef __cplusplus
 }
