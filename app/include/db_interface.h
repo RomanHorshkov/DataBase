@@ -1,12 +1,49 @@
+/**
+ * @file db_interface.h
+ * @brief 
+ *
+ * @author  Roman Horshkov <roman.horshkov@gmail.com>
+ * @date    2025
+ * (c) 2025
+ */
+
 #ifndef DB_INTERFACE_H
 #define DB_INTERFACE_H
 
-#include "db_int.h"
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
-/* ========================================================================= */
-/* ========================================================================= */
-/* LMDB-backed database store API header (presence-only ACL O/S/U).          */
-/* ========================================================================= */
+/****************************************************************************
+ * PUBLIC DEFINES
+ ****************************************************************************
+ */
+
+/* ----------------------- Packed DB records -------------------------------- */
+#define DB_ID_SIZE       16  /* UUID bytes sizes 128 bits */
+#define DB_EMAIL_MAX_LEN 128 /* Maximum length for email strings */
+#define DB_VER           0
+
+/****************************************************************************
+ * PUBLIC STRUCTURED VARIABLES
+ ****************************************************************************
+*/
+
+typedef struct __attribute__((packed))
+{
+    uint8_t  ver;               /* version for future evolution */
+    uint8_t  sha[32];           /* SHA-256 of stored object */
+    char     mime[32];          /* MIME type */
+    uint64_t size;              /* total bytes */
+    uint64_t created_at;        /* epoch seconds */
+    uint8_t  owner[DB_ID_SIZE]; /* uploader id */
+} DataMeta;
+
+/****************************************************************************
+ * PUBLIC FUNCTIONS DECLARATIONS
+ ****************************************************************************
+*/
 
 /**
  * @brief Open the LMDB environment and initialize sub-databases.
@@ -55,11 +92,12 @@ int db_user_find_by_id(const uint8_t id[DB_ID_SIZE],
 
 /**
  * @brief Look up a users by ids.
- * @param id User ID.
- * @param out_email Output email.
+ * @param n_users amount of users
+ * @param ids_flat flat array of ids.
  * @return 0 on success, -ENOENT if not found, -EIO on DB error.
  */
-int db_user_find_by_ids(size_t n_users, uint8_t out_id[n_users * DB_ID_SIZE]);
+int db_user_find_by_ids(size_t        n_users,
+                        const uint8_t ids_flat[n_users * DB_ID_SIZE]);
 
 /**
  * @brief Look up a user id by email.
@@ -168,5 +206,9 @@ int db_data_get_path(uint8_t data_id[DB_ID_SIZE], char* out_path,
 
 int db_env_metrics(uint64_t* used_bytes, uint64_t* mapsize_bytes,
                    uint32_t* page_size);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* DB_INTERFACE_H */

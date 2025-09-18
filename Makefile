@@ -40,6 +40,11 @@ TEST_SRC  := $(TEST_DIR)/src
 
 BIN_DIR   := build/bin
 
+# --- Library build ---
+OBJ_DIR := build/obj
+LIB_DIR := build/lib
+LIB_STATIC := $(LIB_DIR)/libdb.a
+
 # --- Includes ---
 INCLUDES := -I$(APP_INC) -I$(APP_INC)/cryptography -I$(TEST_INC)
 
@@ -65,13 +70,16 @@ SRCS_TEST := \
     $(TEST_SRC)/test_utils.c \
     $(CORE_SRCS)
 
+# --- Library core objects ---
+CORE_OBJS := $(patsubst $(APP_SRC)/%.c,$(OBJ_DIR)/%.o,$(CORE_SRCS))
+
 # --- Flags ---
 CFLAGS  += -O2 -Wall -Wextra -Wshadow -Wconversion -Werror $(INCLUDES) \
            $(OPENSSL_CFLAGS) $(LMDB_CFLAGS)
 LDFLAGS += $(OPENSSL_LIBS) $(LMDB_LIBS)
 
 # --- Targets ---
-.PHONY: all clean test
+.PHONY: all clean test lib
 all: $(BIN_DIR)/db_lmdb_demo
 
 ifeq ($(OPENSSL_FOUND)$(LMDB_FOUND),11)
@@ -109,6 +117,20 @@ test: $(BIN_DIR)/db_tests
 clean:
 	@rm -rf build && rm -rf med/ && rm -f blob_* && rm -rf .test*
 
+
+# --- Library compilation ---
+lib: $(LIB_STATIC)
+
+# Compile objects under build/obj/...
+$(OBJ_DIR)/%.o: $(APP_SRC)/%.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Archive into build/lib/libdb_store.a
+$(LIB_STATIC): $(CORE_OBJS)
+	@mkdir -p $(LIB_DIR)
+	$(AR) rcs $@ $^
+	@echo "Built $@"
 
 # --- Code formatting (clang-format only) ------------------------------------
 CLANG_FORMAT := $(shell command -v clang-format 2>/dev/null)

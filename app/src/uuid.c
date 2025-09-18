@@ -1,3 +1,12 @@
+/**
+ * @file uuid.c
+ * @brief
+ * 
+ * @author  Roman Horshkov <roman.horshkov@gmail.com>
+ * @date    2025
+ * (c) 2025
+ */
+
 #include "uuid.h"
 #include <stdatomic.h>
 #include <fcntl.h>
@@ -9,46 +18,37 @@
 
 #include "db_int.h"
 
-/* Global state: [ ms_since_epoch (high 52 bits) | seq (low 12 bits) ] */
+/****************************************************************************
+ * PRIVATE DEFINES
+ ****************************************************************************
+ */
+/* None */
+
+/****************************************************************************
+ * PRIVATE STUCTURED VARIABLES
+ ****************************************************************************
+ */
+/* None */
+
+/****************************************************************************
+ * PRIVATE VARIABLES
+ ****************************************************************************
+ */
+
 static _Atomic uint64_t g_v7_state = 0;
 
-static inline uint64_t realtime_ms(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return (uint64_t)ts.tv_sec * 1000u + (uint64_t)(ts.tv_nsec / 1000000u);
-}
+/****************************************************************************
+ * PRIVATE FUNCTIONS PROTOTYPES
+ ****************************************************************************
+ */
 
-static int fill_random(void* p, size_t n)
-{
-#if defined(__linux__)
-    ssize_t r = getrandom(p, n, 0);
-    if(r == (ssize_t)n)
-        return 0;
-#endif
-    int fd = open("/dev/urandom", O_RDONLY);
-    if(fd >= 0)
-    {
-        size_t off = 0;
-        while(off < n)
-        {
-            ssize_t rd = read(fd, (uint8_t*)p + off, n - off);
-            if(rd <= 0)
-            {
-                close(fd);
-                return -1;
-            }
-            off += (size_t)rd;
-        }
-        close(fd);
-        return 0;
-    }
-    // very weak fallback
-    for(size_t i = 0; i < n; ++i)
-        ((uint8_t*)p)[i] = (uint8_t)(0xA5 ^ (i * 41));
-    return 0;
-}
+static inline uint64_t realtime_ms(void);
+static int             fill_random(void* p, size_t n);
 
+/****************************************************************************
+ * PUBLIC FUNCTIONS DEFINITIONS
+ ****************************************************************************
+ */
 int uuid_v4(uint8_t out[UUID_BYTES_SIZE])
 {
     if(fill_random(out, 16) != 0)
@@ -154,4 +154,46 @@ void uuid_to_hex(uint8_t id[UUID_BYTES_SIZE], char out32[33])
         out32[i * 2 + 1] = h[id[i] & 0xF];
     }
     out32[32] = '\0';
+}
+
+/****************************************************************************
+ * PRIVATE FUNCTIONS DEFINITIONS
+ ****************************************************************************
+ */
+
+static inline uint64_t realtime_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (uint64_t)ts.tv_sec * 1000u + (uint64_t)(ts.tv_nsec / 1000000u);
+}
+
+static int fill_random(void* p, size_t n)
+{
+#if defined(__linux__)
+    ssize_t r = getrandom(p, n, 0);
+    if(r == (ssize_t)n)
+        return 0;
+#endif
+    int fd = open("/dev/urandom", O_RDONLY);
+    if(fd >= 0)
+    {
+        size_t off = 0;
+        while(off < n)
+        {
+            ssize_t rd = read(fd, (uint8_t*)p + off, n - off);
+            if(rd <= 0)
+            {
+                close(fd);
+                return -1;
+            }
+            off += (size_t)rd;
+        }
+        close(fd);
+        return 0;
+    }
+    // very weak fallback
+    for(size_t i = 0; i < n; ++i)
+        ((uint8_t*)p)[i] = (uint8_t)(0xA5 ^ (i * 41));
+    return 0;
 }

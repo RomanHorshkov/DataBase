@@ -19,13 +19,8 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>  // unlink
-// #include <fcntl.h>
-// #include <inttypes.h>
-// #include <sys/stat.h>
-// #include <time.h>
-// #include "fsutil.h"
-// #include "sha256.h"
-// #include "uuid.h"
+
+#include "db_interface.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -36,11 +31,6 @@ extern "C"
  * PUBLIC DEFINES
  ****************************************************************************
  */
-
-/* ----------------------- Packed DB records -------------------------------- */
-#define DB_ID_SIZE          16  /* UUID bytes sizes 128 bits */
-#define DB_EMAIL_MAX_LEN    128 /* Maximum length for email strings */
-#define DB_VER              0
 
 /* -------------------------- ACL namespaces -------------------------------- */
 /* Presence-only ACL rtype namespaces */
@@ -91,16 +81,6 @@ typedef struct __attribute__((packed))
     char        email[DB_EMAIL_MAX_LEN]; /* bytes + zero-terminated email */
     user_role_t role;                    /* 2 bytes role */
 } UserPacked;
-
-typedef struct __attribute__((packed))
-{
-    uint8_t  ver;               /* version for future evolution */
-    uint8_t  sha[32];           /* SHA-256 of stored object */
-    char     mime[32];          /* MIME type */
-    uint64_t size;              /* total bytes */
-    uint64_t created_at;        /* epoch seconds */
-    uint8_t  owner[DB_ID_SIZE]; /* uploader id */
-} DataMeta;
 
 /****************************************************************************
  * PUBLIC FUNCTIONS DECLARATIONS

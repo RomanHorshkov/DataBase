@@ -73,7 +73,8 @@ int db_user_find_by_id(const uint8_t id[DB_ID_SIZE], char out[DB_EMAIL_MAX_LEN])
     return 0;
 }
 
-int db_user_find_by_ids(size_t n_users, const uint8_t ids_flat[])
+int db_user_find_by_ids(size_t        n_users,
+                        const uint8_t ids_flat[n_users * DB_ID_SIZE])
 {
     if(n_users == 0 || !ids_flat)
         return -EINVAL;

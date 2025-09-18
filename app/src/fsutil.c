@@ -1,3 +1,12 @@
+/**
+ * @file fsutil.c
+ * @brief 
+ *
+ * @author  Roman Horshkov <roman.horshkov@gmail.com>
+ * @date    2025
+ * (c) 2025
+ */
+
 #include "fsutil.h"
 
 #include <errno.h>
@@ -11,18 +20,37 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-static int mkdir_one(const char* path, mode_t mode)
-{
-    if(mkdir(path, mode) == 0)
-        return 0;
-    if(errno == EEXIST)
-    {
-        struct stat st;
-        if(stat(path, &st) == 0 && S_ISDIR(st.st_mode))
-            return 0;
-    }
-    return -1;
-}
+/****************************************************************************
+ * PRIVATE DEFINES
+ ****************************************************************************
+ */
+/* None */
+
+/****************************************************************************
+ * PRIVATE STUCTURED VARIABLES
+ ****************************************************************************
+ */
+/* None */
+
+/****************************************************************************
+ * PRIVATE VARIABLES
+ ****************************************************************************
+ */
+/* None */
+
+/****************************************************************************
+ * PRIVATE FUNCTIONS PROTOTYPES
+ ****************************************************************************
+ */
+
+static int mkdir_one(const char* path, mode_t mode);
+
+static int fsync_parent_dir(const char* path);
+
+/****************************************************************************
+ * PUBLIC FUNCTIONS DEFINITIONS
+ ****************************************************************************
+ */
 
 int mkdir_p(const char* path, mode_t mode)
 {
@@ -61,26 +89,6 @@ int path_sha256(char* out, size_t out_sz, const char* root,
         return -1;
     snprintf(out, out_sz, "%s/objects/sha256/%.2s/%.2s/%s", root, sha_hex64,
              sha_hex64 + 2, sha_hex64);
-    return 0;
-}
-
-static int fsync_parent_dir(const char* path)
-{
-    char* dup = strdup(path);
-    if(!dup)
-        return -1;
-    char* dir = dirname(dup);
-    int   dfd = open(dir, O_RDONLY
-#ifdef O_DIRECTORY
-                            | O_DIRECTORY
-#endif
-    );
-    if(dfd >= 0)
-    {
-        (void)fsync(dfd);
-        close(dfd);
-    }
-    free(dup);
     return 0;
 }
 
@@ -164,5 +172,43 @@ int ensure_symlink(const char* link_path, const char* target)
 
     if(symlink(target, link_path) != 0 && errno != EEXIST)
         return -1;
+    return 0;
+}
+
+/****************************************************************************
+ * PRIVATE FUNCTIONS DEFINITIONS
+ ****************************************************************************
+ */
+
+static int mkdir_one(const char* path, mode_t mode)
+{
+    if(mkdir(path, mode) == 0)
+        return 0;
+    if(errno == EEXIST)
+    {
+        struct stat st;
+        if(stat(path, &st) == 0 && S_ISDIR(st.st_mode))
+            return 0;
+    }
+    return -1;
+}
+
+static int fsync_parent_dir(const char* path)
+{
+    char* dup = strdup(path);
+    if(!dup)
+        return -1;
+    char* dir = dirname(dup);
+    int   dfd = open(dir, O_RDONLY
+#ifdef O_DIRECTORY
+                            | O_DIRECTORY
+#endif
+    );
+    if(dfd >= 0)
+    {
+        (void)fsync(dfd);
+        close(dfd);
+    }
+    free(dup);
     return 0;
 }
