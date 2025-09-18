@@ -55,7 +55,7 @@ static int tl_add_many_users_sample_lookup(void)
         return -1;
     }
 
-    double t0 = 0, t1 = 0, t2 = 0, t3 = 0;
+    double t0 = 0, t1 = 0, t2 = 0, t3 = 0, t4 = 0;
     t0 = tu_now_ms();
     if(db_add_users(N, emails))
     {
@@ -66,56 +66,57 @@ static int tl_add_many_users_sample_lookup(void)
         return -1;
     }
 
-    // for(size_t i = 0; i < N; i++)
-    // {
-    //     if(db_add_user(emails + i * DB_EMAIL_MAX_LEN, ids + i * 16) != 0)
-    //     {
-    //         tu_failf(__FILE__, __LINE__, "add_user id=%s at i=%zu",
-    //                  ids + i * 16, i);
-    //         free(ids);
-    //         free(emails);
-    //         tu_teardown_store(&ctx);
-    //         return -1;
-    //     }
-    // }
     t1 = tu_now_ms();
 
-    // for(size_t i = 0; i < SAMPLE; i++)
-    // {
-    //     if(db_user_find_by_id(ids + i * 16, NULL) != 0)
-    //     {
-    //         tu_failf(__FILE__, __LINE__, "lookup id=%s at i=%zu", ids + i * 16,
-    //                  i);
-    //         free(ids);
-    //         free(emails);
-    //         tu_teardown_store(&ctx);
-    //         return -1;
-    //     }
-    // }
+    /* collect all user IDs we just inserted */
+    size_t cap = N;
+    int rmc = db_user_list_all(ids, &cap);
+    if(rmc != 0 || cap != N) {
+        tu_failf(__FILE__, __LINE__,
+                 "list_all failed rmc=%d cap=%zu (expected %zu)", rmc, cap, N);
+        free(ids);
+        free(emails);
+        tu_teardown_store(&ctx);
+        return -1;
+    }
+
     t2 = tu_now_ms();
+
+    /* now verify they all exist via the batch checker */
+    rmc = db_user_find_by_ids(N, ids);
+    if(rmc != 0) {
+        tu_failf(__FILE__, __LINE__, "lookup ids fail code %d", rmc);
+        free(ids);
+        free(emails);
+        tu_teardown_store(&ctx);
+        return -1;
+    }
+    
+    t3 = tu_now_ms();
     for(size_t i = 0; i < SAMPLE; i++)
     {
-        int rc = db_user_find_by_email(subset + i * DB_EMAIL_MAX_LEN, NULL);
-        if(rc != 0)
+        rmc = db_user_find_by_email(subset + i * DB_EMAIL_MAX_LEN, NULL);
+        if(rmc != 0)
         {
-            tu_failf(__FILE__, __LINE__, "lookup rc=%d at i=%zu", rc, i);
+            tu_failf(__FILE__, __LINE__, "lookup rc=%d at i=%zu", rmc, i);
             free(ids);
             free(emails);
             tu_teardown_store(&ctx);
             return -1;
         }
-        // EXPECT_TRUE(strncmp(email_out, emails + i*DB_EMAIL_MAX_LEN, DB_EMAIL_MAX_LEN)==0);
     }
-    t3 = tu_now_ms();
+    t4 = tu_now_ms();
 
-    fprintf(stderr, C_YEL "insert %zu users: %.1f ms (%.1f µs/user)\n" C_RESET,
+    fprintf(stderr, C_YEL "batch insert %zu users: %.2f ms (%.2f µs/user)\n" C_RESET,
             N, t1 - t0, 1000.0 * (t1 - t0) / (double)N);
+    fprintf(stderr, C_YEL "batch list, get ids %zu users: %.2f ms (%.2f µs/user)\n" C_RESET,
+            N, t2 - t1, 1000.0 * (t2 - t1) / (double)N);
     fprintf(stderr,
-            C_YEL "sample %zu id-lookups: %.1f ms (%.1f µs/op)\n" C_RESET,
-            SAMPLE, t2 - t1, 1000.0 * (t2 - t1) / (double)SAMPLE);
-    fprintf(stderr,
-            C_YEL "sample %zu email-lookups: %.1f ms (%.1f µs/op)\n" C_RESET,
+            C_YEL "batch sample %zu id-lookups: %.2f ms (%.2f µs/op)\n" C_RESET,
             SAMPLE, t3 - t2, 1000.0 * (t3 - t2) / (double)SAMPLE);
+    fprintf(stderr,
+            C_YEL "single sample %zu email-lookups: %.2f ms (%.2f µs/op)\n" C_RESET,
+            SAMPLE, t4 - t3, 1000.0 * (t4 - t3) / (double)SAMPLE);
 
     free(ids);
     free(emails);

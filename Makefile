@@ -49,7 +49,6 @@ CORE_SRCS := \
     $(APP_SRC)/db_users.c \
     $(APP_SRC)/db_data.c \
     $(APP_SRC)/db_acl.c \
-    $(APP_SRC)/db_interface.c \
     $(APP_SRC)/fsutil.c \
     $(APP_SRC)/uuid.c \
     $(APP_SRC)/cryptography/sha256.c

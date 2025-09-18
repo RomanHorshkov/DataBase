@@ -31,15 +31,34 @@ void db_close(void);
  */
 int db_add_user(const char email[DB_EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE]);
 
-int db_add_users(size_t n_users, const char email_flat[]);
+/**
+ * @brief Insert a batch of users. If any present, fail.
+ * @param n_users User emails amount.
+ * @param email_flat User emails flat array
+ * @return 0 on insertion, -EEXIST if already existed, -EINVAL bad input, -EIO DB error.
+ */
+int db_add_users(size_t n_users, const char email_flat[n_users*DB_EMAIL_MAX_LEN]);
+
 /**
  * @brief Look up a user by id and optionally return email.
+ * Works with any order of ids_flat:
+   - makes a local sorted copy
+   - runs a single cursor merge-walk
+   - if alloc fails, falls back to mdb_get loop
  * @param id User ID.
  * @param out_email Output email.
  * @return 0 on success, -ENOENT if not found, -EIO on DB error.
  */
 int db_user_find_by_id(const uint8_t id[DB_ID_SIZE],
                        char          out_email[DB_EMAIL_MAX_LEN]);
+
+/**
+ * @brief Look up a users by ids.
+ * @param id User ID.
+ * @param out_email Output email.
+ * @return 0 on success, -ENOENT if not found, -EIO on DB error.
+ */
+int db_user_find_by_ids(size_t n_users, uint8_t out_id[n_users * DB_ID_SIZE]);
 
 /**
  * @brief Look up a user id by email.

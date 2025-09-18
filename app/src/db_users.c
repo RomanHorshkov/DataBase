@@ -36,6 +36,11 @@
 
 static int db_user_set_role(uint8_t userId[DB_ID_SIZE], user_role_t role);
 
+/* qsort comparator for 16-byte ids */
+static int cmp_id16(const void* a, const void* b) {
+    return memcmp(a, b, DB_ID_SIZE);
+}
+
 /****************************************************************************
  * PUBLIC FUNCTIONS DEFINITIONS
  ****************************************************************************
@@ -65,6 +70,128 @@ int db_user_find_by_id(const uint8_t id[DB_ID_SIZE], char out[DB_EMAIL_MAX_LEN])
     if(out)
         memcpy(out, ((UserPacked *)v.mv_data)->email, DB_EMAIL_MAX_LEN);
     mdb_txn_abort(txn);
+    return 0;
+}
+
+int db_user_find_by_ids(size_t n_users, const uint8_t ids_flat[])
+{
+    if(n_users == 0 || !ids_flat) return -EINVAL;
+
+    MDB_txn* txn = NULL;
+    int mrc = mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn);
+    if(mrc != MDB_SUCCESS) return db_map_mdb_err(mrc);
+
+    /* Try fast path: sort a local copy */
+    uint8_t* ids_sorted = (uint8_t*)malloc(n_users * DB_ID_SIZE);
+    if(ids_sorted) {
+        memcpy(ids_sorted, ids_flat, n_users * DB_ID_SIZE);
+
+        qsort(ids_sorted, n_users, DB_ID_SIZE, cmp_id16);
+
+        /* optional: skip duplicate target IDs to avoid redundant work */
+        size_t uniq = 0;
+        for(size_t i = 0; i < n_users; ++i) {
+            if(uniq == 0 || memcmp(ids_sorted + (uniq-1)*DB_ID_SIZE,
+                                   ids_sorted + i*DB_ID_SIZE, DB_ID_SIZE) != 0) {
+                if(uniq != i)
+                    memcpy(ids_sorted + uniq*DB_ID_SIZE,
+                           ids_sorted + i*DB_ID_SIZE, DB_ID_SIZE);
+                ++uniq;
+            }
+        }
+
+        MDB_cursor* cur = NULL;
+        if(mdb_cursor_open(txn, DB->db_user, &cur) != MDB_SUCCESS) {
+            free(ids_sorted);
+            mdb_txn_abort(txn);
+            return -EIO;
+        }
+
+        MDB_val k = {0}, v = {0};
+        int rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST);
+        if(rc == MDB_NOTFOUND) { /* empty table but we have ids */
+            mdb_cursor_close(cur);
+            free(ids_sorted);
+            mdb_txn_abort(txn);
+            return -ENOENT;
+        }
+        if(rc != MDB_SUCCESS) {
+            mdb_cursor_close(cur);
+            free(ids_sorted);
+            mdb_txn_abort(txn);
+            return -EIO;
+        }
+
+        for(size_t i = 0; i < uniq; ++i) {
+            const uint8_t* want = ids_sorted + i*DB_ID_SIZE;
+
+            /* advance until current key >= want */
+            for(;;) {
+                int cmp = (k.mv_size == DB_ID_SIZE)
+                          ? memcmp(k.mv_data, want, DB_ID_SIZE)
+                          : (k.mv_size < DB_ID_SIZE ? -1 : 1);
+                if(cmp >= 0) break;
+
+                rc = mdb_cursor_get(cur, &k, &v, MDB_NEXT);
+                if(rc == MDB_NOTFOUND) {
+                    mdb_cursor_close(cur);
+                    free(ids_sorted);
+                    mdb_txn_abort(txn);
+                    return -ENOENT;
+                }
+                if(rc != MDB_SUCCESS) {
+                    mdb_cursor_close(cur);
+                    free(ids_sorted);
+                    mdb_txn_abort(txn);
+                    return -EIO;
+                }
+            }
+
+            if(k.mv_size != DB_ID_SIZE || memcmp(k.mv_data, want, DB_ID_SIZE) != 0) {
+                mdb_cursor_close(cur);
+                free(ids_sorted);
+                mdb_txn_abort(txn);
+                return -ENOENT;
+            }
+            if(v.mv_size != sizeof(UserPacked)) {
+                mdb_cursor_close(cur);
+                free(ids_sorted);
+                mdb_txn_abort(txn);
+                return -EIO;
+            }
+
+            /* small prefetch; ok if it hits NOTFOUND on the very last key */
+            if(i + 1 < uniq) {
+                rc = mdb_cursor_get(cur, &k, &v, MDB_NEXT);
+                if(rc != MDB_SUCCESS && rc != MDB_NOTFOUND) {
+                    mdb_cursor_close(cur);
+                    free(ids_sorted);
+                    mdb_txn_abort(txn);
+                    return -EIO;
+                }
+            }
+        }
+
+        mdb_cursor_close(cur);
+        free(ids_sorted);
+
+        mrc = mdb_txn_commit(txn);
+        if(mrc != MDB_SUCCESS) { mdb_txn_abort(txn); return -EIO; }
+        return 0;
+    }
+
+    /* Fallback: no memory → individual lookups (still correct). */
+    for(size_t i = 0; i < n_users; ++i) {
+        const uint8_t* id = &ids_flat[i*DB_ID_SIZE];
+        MDB_val k = { .mv_size = DB_ID_SIZE, .mv_data = (void*)id };
+        MDB_val v = {0};
+        mrc = mdb_get(txn, DB->db_user, &k, &v);
+        if(mrc == MDB_NOTFOUND) { mdb_txn_abort(txn); return -ENOENT; }
+        if(mrc != MDB_SUCCESS)  { mdb_txn_abort(txn); return db_map_mdb_err(mrc); }
+        if(v.mv_size != sizeof(UserPacked)) { mdb_txn_abort(txn); return -EIO; }
+    }
+    mrc = mdb_txn_commit(txn);
+    if(mrc != MDB_SUCCESS) { mdb_txn_abort(txn); return -EIO; }
     return 0;
 }
 
@@ -186,15 +313,12 @@ int db_add_user(const char email[DB_EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
         memcpy(out_id, id, DB_ID_SIZE);
     return 0;
 }
-int db_add_users(size_t n_users, const char email_flat[])
+
+int db_add_users(size_t     n_users,
+                 const char email_flat[n_users * DB_EMAIL_MAX_LEN])
 {
     if(!email_flat)
         return -EINVAL;
-
-    MDB_txn *txn = NULL;
-    int      mrc = mdb_txn_begin(DB->env, NULL, 0, &txn);
-    if(mrc != MDB_SUCCESS)
-        return db_map_mdb_err(mrc);
 
     const unsigned email_put_flags =
         MDB_NOOVERWRITE | MDB_RESERVE; /* not append */
@@ -203,6 +327,11 @@ int db_add_users(size_t n_users, const char email_flat[])
 
     uint8_t last_id[DB_ID_SIZE] = {0}; /* monotonic guard */
     int     have_last           = 0;
+
+    MDB_txn *txn = NULL;
+    int      mrc = mdb_txn_begin(DB->env, NULL, 0, &txn);
+    if(mrc != MDB_SUCCESS)
+        return db_map_mdb_err(mrc);
 
     for(size_t i = 0; i < n_users; ++i)
     {
@@ -241,12 +370,9 @@ int db_add_users(size_t n_users, const char email_flat[])
         MDB_val v_u = {.mv_size = sizeof(UserPacked), .mv_data = NULL};
 
         mrc = mdb_put(txn, DB->db_user, &k_u, &v_u, user_put_flags);
-        if(mrc == MDB_KEYEXIST)
-        {             /* unbelievably rare */
-            continue; /* regenerate on next loop */
-        }
         if(mrc != MDB_SUCCESS)
         {
+            /* MDB_KEYEXIST unbelievably rare */
             mdb_txn_abort(txn);
             return db_map_mdb_err(mrc);
         }
