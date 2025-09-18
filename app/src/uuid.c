@@ -60,10 +60,12 @@ int uuid_v4(uint8_t out[UUID_BYTES_SIZE])
 
 int uuid_v7(uint8_t out[UUID_BYTES_SIZE])
 {
+    static uint8_t last_id[DB_ID_SIZE] = {0}; /* monotonic guard */
     /* Reserve strictly increasing (ms,seq) using a CAS loop */
     uint64_t use_ms;
     uint16_t seq12;
 
+restart:
     for(;;)
     {
         uint64_t now_ms = realtime_ms();
@@ -136,6 +138,9 @@ int uuid_v7(uint8_t out[UUID_BYTES_SIZE])
     out[13] = rb[5];
     out[14] = rb[6];
     out[15] = rb[7];
+
+    if(memcmp(last_id, out, DB_ID_SIZE) == 0)
+        goto restart;
 
     return 0;
 }

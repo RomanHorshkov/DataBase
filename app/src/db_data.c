@@ -105,10 +105,8 @@ int db_data_add_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd, const char *mime,
     /* Permission check: owner must exist and be a publisher */
     {
         int prc = db_user_get_role(owner, &owner_role);
-        if(prc == -ENOENT)
-            return -ENOENT;
         if(prc != 0)
-            return -EIO;
+            return db_map_mdb_err(prc);
         if(owner_role != USER_ROLE_PUBLISHER)
             return -EPERM;
     }
@@ -121,87 +119,90 @@ int db_data_add_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd, const char *mime,
         return -EIO;
 
     /* Upsert sha2data and data_meta in a single transaction */
-    uint8_t  data_id[DB_ID_SIZE];
-    MDB_txn *txn;
-    if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS)
-        return -EIO;
+    uint8_t  data_id[DB_ID_SIZE] = {0};
+    unsigned db_sha2id_put_flags = MDB_NOOVERWRITE | MDB_RESERVE;
+    unsigned db_dataid_put_flags = MDB_NOOVERWRITE | MDB_RESERVE | MDB_APPEND;
 
-    MDB_val sk  = {.mv_size = 32, .mv_data = (void *)digest.b};
-    MDB_val sv  = {0};
-    int     mrc = mdb_get(txn, DB->db_sha2data, &sk, &sv);
+retry_chunk:
+    MDB_txn *txn = NULL;
 
-    /* Dedup hit: reuse existing id, grant owner presence, and return -EEXIST */
-    if(mrc == MDB_SUCCESS && sv.mv_size == DB_ID_SIZE)
+    int mrc = mdb_txn_begin(DB->env, NULL, 0, &txn);
+    if(mrc != MDB_SUCCESS)
+        return db_map_mdb_err(mrc);
+
+    /* sha -> data, make sure unique exists */
+    MDB_val shak = {.mv_size = 32, .mv_data = (void *)digest.b};
+    MDB_val shav = {.mv_size = sizeof(DataMeta), .mv_data = NULL};
+
+    mrc = mdb_put(txn, DB->db_sha2data, &shak, &shav, db_sha2id_put_flags);
+    if(mrc == MDB_MAP_FULL)
     {
-        // memcpy(data_id, sv.mv_data, DB_ID_SIZE);
-        // mrc = acl_grant_txn(txn, owner, ACL_RTYPE_OWNER, data_id);
-        // if(mrc != MDB_SUCCESS)
-        // {
-        //     mdb_txn_abort(txn);
-        //     return db_map_mdb_err(mrc);
-        // }
-        // mrc = mdb_txn_commit(txn);
-        // if(mrc != MDB_SUCCESS)
-        // {
-        //     mdb_txn_abort(txn);
-        //     return db_map_mdb_err(mrc);
-        // }
-        // if(out_data_id)
-        //     memcpy(out_data_id, data_id, DB_ID_SIZE);
-
         mdb_txn_abort(txn);
-        return -EEXIST;
+        int grc = db_env_mapsize_expand(); /* grow */
+        if(grc != 0)
+            return db_map_mdb_err(grc); /* stop if grow failed */
+        goto retry_chunk;               /* retry whole chunk */
     }
-    /* New object: assign id and write meta + sha2data */
-    else if(mrc == MDB_NOTFOUND)
+    if(mrc != MDB_SUCCESS)
     {
-        uuid_v7(data_id);
-
-        DataMeta mp;
-        memset(&mp, 0, sizeof mp);
-        mp.ver = 1;
-        memcpy(mp.sha, digest.b, 32);
-        snprintf(mp.mime, sizeof mp.mime, "%s",
-                 (mime && *mime) ? mime : "application/octet-stream");
-        mp.size       = (uint64_t)total;
-        mp.created_at = now_secs();
-        memcpy(mp.owner, owner, DB_ID_SIZE);
-
-        MDB_val mk  = {.mv_size = DB_ID_SIZE, .mv_data = (void *)data_id};
-        MDB_val mv  = {.mv_size = sizeof(DataMeta), .mv_data = (void *)&mp};
-        MDB_val siv = {.mv_size = DB_ID_SIZE, .mv_data = (void *)data_id};
-
-        if(mdb_put(txn, DB->db_data_meta, &mk, &mv, 0) != MDB_SUCCESS)
-        {
-            mdb_txn_abort(txn);
-            return -EIO;
-        }
-        if(mdb_put(txn, DB->db_sha2data, &sk, &siv, 0) != MDB_SUCCESS)
-        {
-            mdb_txn_abort(txn);
-            return -EIO;
-        }
-        if(acl_grant_txn(txn, owner, ACL_RTYPE_OWNER, data_id) != 0)
-        {
-            mdb_txn_abort(txn);
-            return -EIO;
-        }
-
-        if(mdb_txn_commit(txn) != MDB_SUCCESS)
-        {
-            mdb_txn_abort(txn);
-            return -EIO;
-        }
-        if(out_data_id)
-            memcpy(out_data_id, data_id, DB_ID_SIZE);
-        return 0;
+        mdb_txn_abort(txn);
+        return db_map_mdb_err(mrc);
     }
-    else
+    /* new object generate id, write it into reserved sha->id slot */
+    uuid_v7(data_id);
+    memcpy(shav.mv_data, data_id, DB_ID_SIZE);
+
+    MDB_val datak = {.mv_size = DB_ID_SIZE, .mv_data = (void *)data_id};
+    MDB_val datav = {.mv_size = sizeof(DataMeta), .mv_data = NULL};
+
+    mrc = mdb_put(txn, DB->db_data_meta, &datak, &datav, db_dataid_put_flags);
+    if(mrc == MDB_MAP_FULL)
     {
-        /* Unexpected LMDB error */
+        mdb_txn_abort(txn);
+        int grc = db_env_mapsize_expand(); /* grow */
+        if(grc != 0)
+            return db_map_mdb_err(grc); /* stop if grow failed */
+        goto retry_chunk;               /* retry whole chunk */
+    }
+    if(mrc != MDB_SUCCESS)
+    {
+        mdb_txn_abort(txn);
+        return db_map_mdb_err(mrc);
+    }
+
+    /* fill DataMeta in-place (no stack buffer) */
+    DataMeta *mp = (DataMeta *)datav.mv_data;
+    memset(mp, 0, sizeof *mp);
+    mp->ver = DB_VER;
+    memcpy(mp->sha, digest.b, 32);
+    snprintf(mp->mime, sizeof mp->mime, "%s",
+             (mime && *mime) ? mime : "application/octet-stream");
+    mp->size       = (uint64_t)total;
+    mp->created_at = now_secs();
+    memcpy(mp->owner, owner, DB_ID_SIZE);
+
+    if(acl_grant_txn(txn, owner, ACL_RTYPE_OWNER, data_id) != 0)
+    {
         mdb_txn_abort(txn);
         return -EIO;
     }
+
+    mrc = mdb_txn_commit(txn);
+    if(mrc == MDB_MAP_FULL)
+    {
+        int grc = db_env_mapsize_expand();
+        if(grc != 0)
+            return db_map_mdb_err(grc); /* stop if grow failed */
+        goto retry_chunk;
+    }
+    if(mrc != MDB_SUCCESS)
+    {
+        /* txn is already aborted/freed on commit error */
+        return db_map_mdb_err(mrc);
+    }
+    if(out_data_id)
+        memcpy(out_data_id, data_id, DB_ID_SIZE);
+    return 0;
 }
 
 int db_data_delete(const uint8_t owner[DB_ID_SIZE],
@@ -210,6 +211,7 @@ int db_data_delete(const uint8_t owner[DB_ID_SIZE],
     if(!owner || !data_id)
         return -EINVAL;
 
+retry_chunk:
     MDB_txn *txn;
     if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS)
         return -EIO;
@@ -311,11 +313,18 @@ int db_data_delete(const uint8_t owner[DB_ID_SIZE],
         (void)mdb_del(txn, DB->db_data_meta, &mk, NULL);
     }
 
-    /* Commit DB first, then unlink blob on disk. */
-    if(mdb_txn_commit(txn) != MDB_SUCCESS)
+    int mrc = mdb_txn_commit(txn);
+    if(mrc == MDB_MAP_FULL)
     {
-        mdb_txn_abort(txn);
-        return -EIO;
+        int grc = db_env_mapsize_expand();
+        if(grc != 0)
+            return db_map_mdb_err(grc); /* stop if grow failed */
+        goto retry_chunk;
+    }
+    if(mrc != MDB_SUCCESS)
+    {
+        /* txn is already aborted/freed on commit error */
+        return db_map_mdb_err(mrc);
     }
 
     /* Remove the blob (best-effort) */
@@ -351,7 +360,7 @@ static int db_user_get_role(const uint8_t id[DB_ID_SIZE], user_role_t *out_role)
     if(mrc != MDB_SUCCESS)
     {
         mdb_txn_abort(txn);
-        return db_map_mdb_err(mrc);
+        return mrc;
     }
     if(v.mv_size != sizeof(UserPacked))
     {

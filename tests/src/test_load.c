@@ -118,7 +118,7 @@ static int tl_db_measure_size(void)
 
     /* knobs */
     const size_t N     = env_sz("STRESS_USERS", 1000000); /* total inserts */
-    const size_t CHUNK = env_sz("STRESS_CHUNK", N / 10);   /* batch size */
+    const size_t CHUNK = env_sz("STRESS_CHUNK", N / 10);  /* batch size */
     const int    DO_DU = getenv("DU") ? atoi(getenv("DU")) : 0; /* dir walk? */
 
     /* meta dir path */

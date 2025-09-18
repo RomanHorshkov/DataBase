@@ -87,8 +87,8 @@ typedef uint16_t user_role_t;
 
 typedef struct __attribute__((packed))
 {
-    uint8_t     id[DB_ID_SIZE];          /* 16 bytes user id */
-    char        email[DB_EMAIL_MAX_LEN]; /* 128 bytes zero-terminated email */
+    uint8_t     id[DB_ID_SIZE];          /* bytes user id */
+    char        email[DB_EMAIL_MAX_LEN]; /* bytes + zero-terminated email */
     user_role_t role;                    /* 2 bytes role */
 } UserPacked;
 
