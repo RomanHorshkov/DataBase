@@ -1,11 +1,55 @@
 /* tests/src/test_load.c */
-#include "test_utils.h"
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
+
 #include <lmdb.h>
 #include <inttypes.h>  // for PRIu64
+
+#include "test_utils.h"
 #include "db_interface.h"
+
+/* helper: create file of `size` with deterministic content */
+static int make_blob_sized(const char* path, size_t size, uint32_t seed)
+{
+    int fd = open(path, O_CREAT | O_RDWR | O_TRUNC, 0640);  // <-- O_RDWR
+    if(fd < 0)
+        return -1;
+
+    unsigned char hdr[16] = {'D', 'I', 'C', 'M', 0x00, 0x01, 0, 0,
+                             0,   0,   0,   0,   0,    0,    0, 0};
+    hdr[6]                = (unsigned char)((seed >> 24) & 0xFFu);
+    hdr[7]                = (unsigned char)((seed >> 16) & 0xFFu);
+    hdr[8]                = (unsigned char)((seed >> 8) & 0xFFu);
+    hdr[9]                = (unsigned char)((seed >> 0) & 0xFFu);
+    if(write(fd, hdr, (size_t)sizeof hdr) != (ssize_t)sizeof hdr)
+    {
+        close(fd);
+        return -1;
+    }
+
+    size_t        written = sizeof hdr;
+    unsigned char buf[64 * 1024];
+    uint32_t      x = seed ? seed : 0xA5A5A5A5u;
+    for(size_t i = 0; i < sizeof buf; ++i)
+    {
+        x      ^= x << 13;
+        x      ^= x >> 17;
+        x      ^= x << 5;
+        buf[i]  = (unsigned char)(x & 0xFFu);
+    }
+    while(written < size)
+    {
+        size_t chunk = size - written;
+        if(chunk > sizeof buf)
+            chunk = sizeof buf;
+        if(write(fd, buf, chunk) != (ssize_t)chunk)
+        {
+            close(fd);
+            return -1;
+        }
+        written += chunk;
+    }
+    (void)lseek(fd, 0, SEEK_SET);
+    return fd;
+}
 
 /* Env knobs (with safe defaults) */
 static size_t env_sz(const char* key, size_t def)
@@ -218,20 +262,242 @@ static int tl_db_measure_size(void)
     return 0;
 }
 
-/* ------------------------------ Registry + runner ------------------------- */
-static int tl_add_many_users_sample_lookup_declared(void)
+/* Upload mixed sizes (100×1KiB, 100×1MiB, 100×10MiB), then share fanout with metrics.
+ * Robust to individual upload failures: we count them and only share successful objects. */
+static int tl_upload_mixed_sizes_and_share_details(void)
 {
-    return tl_add_many_users_sample_lookup();
-}
+    /* knobs (env-tunable) */
+    const size_t N1 = env_sz("MIX_N_1KIB", 100);
+    const size_t N2 = env_sz("MIX_N_1MIB", 100);
+    const size_t N3 = env_sz("MIX_N_10MIB", 100);
+    const size_t S1 = env_sz("MIX_SZ_1KIB", 1ULL * 1024ULL);
+    const size_t S2 = env_sz("MIX_SZ_1MIB", 1ULL * 1024ULL * 1024ULL);
+    const size_t S3 = env_sz("MIX_SZ_10MIB", 10ULL * 1024ULL * 1024ULL);
+    const size_t SHARES_PER_OBJ = env_sz("MIX_SHARES_PER_OBJ", 8);
+    const size_t NU             = env_sz("MIX_USERS", 8000);
 
-static int tl_db_measure_size_declared(void)
-{
-    return tl_db_measure_size();
+    Ctx ctx;
+    if(tu_setup_store(&ctx) != 0)
+    {
+        tu_failf(__FILE__, __LINE__, "setup failed");
+        return -1;
+    }
+
+    /* users pool */
+    char* emails = tu_generate_email_list_seq(NU, "mix_", "@x.com");
+    if(!emails)
+    {
+        tu_teardown_store(&ctx);
+        tu_failf(__FILE__, __LINE__, "email alloc");
+        return -1;
+    }
+    if(db_add_users(NU, emails) != 0)
+    {
+        free(emails);
+        tu_teardown_store(&ctx);
+        tu_failf(__FILE__, __LINE__, "add_users");
+        return -1;
+    }
+
+    /* owner (idx 0) */
+    uint8_t owner[DB_ID_SIZE] = {0};
+    if(db_user_find_by_email(emails, owner) != 0)
+    {
+        free(emails);
+        tu_teardown_store(&ctx);
+        tu_failf(__FILE__, __LINE__, "owner lookup");
+        return -1;
+    }
+    if(db_user_set_role_publisher(owner) != 0)
+    {
+        free(emails);
+        tu_teardown_store(&ctx);
+        tu_failf(__FILE__, __LINE__, "owner->publisher");
+        return -1;
+    }
+
+    struct Bucket
+    {
+        const char* name;
+        size_t      n;
+        size_t      bytes;
+        uint8_t*    dids;
+        uint8_t*    ok;
+    };
+    struct Bucket  b1         = {"1KiB", N1, S1, NULL, NULL};
+    struct Bucket  b2         = {"1MiB", N2, S2, NULL, NULL};
+    struct Bucket  b3         = {"10MiB", N3, S3, NULL, NULL};
+    struct Bucket* buckets[3] = {&b1, &b2, &b3};
+
+    double   t_upload_total_ms = 0.0;
+    uint64_t bytes_total_ok    = 0;
+
+    for(int bi = 0; bi < 3; ++bi)
+    {
+        struct Bucket* b = buckets[bi];
+        b->dids          = (uint8_t*)calloc(b->n, DB_ID_SIZE);
+        b->ok            = (uint8_t*)calloc(b->n, 1);
+        if(!b->dids || !b->ok)
+        {
+            tu_failf(__FILE__, __LINE__, "alloc ids/ok");
+            free(emails);
+            tu_teardown_store(&ctx);
+            return -1;
+        }
+
+        size_t ok_cnt = 0, fail_cnt = 0;
+        double t0 = tu_now_ms();
+        for(size_t i = 0; i < b->n; i++)
+        {
+            char p[PATH_MAX];
+            snprintf(p, sizeof p, "./.tmp_mix_%s_%zu.bin", b->name, i);
+            uint32_t seed =
+                0x1234u + ((uint32_t)bi << 20) + (uint32_t)i; /* unique */
+            int fd = make_blob_sized(p, b->bytes, seed);
+            if(fd < 0)
+            {
+                fail_cnt++;
+                continue;
+            }
+            int rc = db_data_add_from_fd(owner, fd, "application/octet-stream",
+                                         b->dids + i * DB_ID_SIZE);
+            close(fd);
+            unlink(p);
+            if(rc == 0)
+            {
+                b->ok[i] = 1;
+                ok_cnt++;
+            }
+            else
+            {
+                /* record but do not fail the whole load test */
+                fail_cnt++;
+                /* optional: first few failures detail */
+                if(fail_cnt <= 3)
+                {
+                    tu_err("upload %s[%zu] rc=%d(%s)\n", b->name, i, rc,
+                           tu_errname(rc));
+                }
+            }
+        }
+        double t1 = tu_now_ms();
+        double dt = t1 - t0;
+
+        /* metrics use only successful uploads */
+        double mib_ok = ((double)ok_cnt * (double)b->bytes) / (1024.0 * 1024.0);
+        double us_per = ok_cnt ? (1000.0 * dt / (double)ok_cnt) : 0.0;
+        double mibs   = (dt > 0.0) ? (mib_ok / (dt / 1000.0)) : 0.0;
+
+        t_upload_total_ms += dt;
+        bytes_total_ok    += (uint64_t)ok_cnt * (uint64_t)b->bytes;
+
+        fprintf(stderr,
+                C_YEL
+                "upload %-6s ok=%5zu/%-5zu  %7.2f MiB: %.1f ms  (%.1f µs/op)  "
+                "[%.2f MiB/s]\n" C_RESET,
+                b->name, ok_cnt, b->n, mib_ok, dt, us_per, mibs);
+    }
+
+    /* overall upload */
+    {
+        size_t total_ok = 0;
+        for(int bi = 0; bi < 3; ++bi)
+        {
+            struct Bucket* b = buckets[bi];
+            for(size_t i = 0; i < b->n; i++)
+                total_ok += (size_t)b->ok[i];
+        }
+        double mib_ok = (double)bytes_total_ok / (1024.0 * 1024.0);
+        double us_per =
+            total_ok ? (1000.0 * t_upload_total_ms / (double)total_ok) : 0.0;
+        double mibs = (t_upload_total_ms > 0.0)
+                          ? (mib_ok / (t_upload_total_ms / 1000.0))
+                          : 0.0;
+        fprintf(stderr,
+                C_CYN
+                "upload TOTAL  ok=%5zu objs  %7.2f MiB: %.1f ms  (%.1f µs/op)  "
+                "[%.2f MiB/s]\n" C_RESET,
+                total_ok, mib_ok, t_upload_total_ms, us_per, mibs);
+    }
+
+    /* share fan-out only over successful objects */
+    srand(123);
+    size_t total_share_ops  = 0;
+    double t_share_total_ms = 0.0;
+
+    for(int bi = 0; bi < 3; ++bi)
+    {
+        struct Bucket* b  = buckets[bi];
+        size_t         ok = 0, exist = 0, err = 0, ops = 0;
+
+        double t0 = tu_now_ms();
+        for(size_t i = 0; i < b->n; i++)
+        {
+            if(!b->ok[i])
+                continue; /* skip failed uploads */
+            const uint8_t* did = b->dids + i * DB_ID_SIZE;
+            for(size_t s = 0; s < SHARES_PER_OBJ; s++)
+            {
+                size_t uidx;
+                do
+                {
+                    uidx = (size_t)(rand() % (int)NU);
+                } while(uidx == 0); /* avoid owner */
+                const char* email = emails + uidx * DB_EMAIL_MAX_LEN;
+                int rc = db_user_share_data_with_user_email(owner, did, email);
+                if(rc == 0)
+                    ok++;
+                else if(rc == -EEXIST)
+                    exist++;
+                else
+                {
+                    err++;
+                }
+                ops++;
+            }
+        }
+        double t1 = tu_now_ms();
+        double dt = t1 - t0;
+
+        total_share_ops  += ops;
+        t_share_total_ms += dt;
+
+        double us_per = ops ? (1000.0 * dt / (double)ops) : 0.0;
+        fprintf(stderr,
+                C_YEL
+                "share  %-6s ops=%zu: %.1f ms  (%.1f µs/op)  OK=%zu  EXIST=%zu "
+                " ERR=%zu\n" C_RESET,
+                b->name, ops, dt, us_per, ok, exist, err);
+    }
+
+    /* overall share */
+    {
+        double us_per =
+            total_share_ops
+                ? (1000.0 * t_share_total_ms / (double)total_share_ops)
+                : 0.0;
+        fprintf(stderr,
+                C_CYN "share  TOTAL  ops=%zu: %.1f ms  (%.1f µs/op)\n" C_RESET,
+                total_share_ops, t_share_total_ms, us_per);
+    }
+
+    /* cleanup */
+    free(b1.dids);
+    free(b1.ok);
+    free(b2.dids);
+    free(b2.ok);
+    free(b3.dids);
+    free(b3.ok);
+    free(emails);
+    tu_teardown_store(&ctx);
+    return 0;
 }
 
 static const TU_Test LOAD_TESTS[] = {
-    {"add_many_users_sample_lookup", tl_add_many_users_sample_lookup_declared},
-    {"db_measure_size", tl_db_measure_size_declared},
+    {"add_many_users_sample_lookup", tl_add_many_users_sample_lookup},
+    {"db_measure_size", tl_db_measure_size},
+    {"upload_mixed_sizes_and_share_details",
+     tl_upload_mixed_sizes_and_share_details},
 };
 
 static const size_t NLOAD = sizeof(LOAD_TESTS) / sizeof(LOAD_TESTS[0]);

@@ -1,12 +1,16 @@
 #pragma once
 #define _XOPEN_SOURCE 700
 #include <stdint.h>
+#include <string.h>
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <time.h>
+#include <fcntl.h>   // open, O_CREAT, O_WRONLY, O_TRUNC
+#include <unistd.h>  // write, lseek, close
+#include <limits.h>  // PATH_MAX
 
 #ifndef PATH_MAX
 #    define PATH_MAX 4096

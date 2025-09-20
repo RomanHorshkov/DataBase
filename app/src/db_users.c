@@ -104,7 +104,7 @@ int db_user_find_by_id(const uint8_t id[DB_ID_SIZE], char out[DB_EMAIL_MAX_LEN])
 
     MDB_val k   = {.mv_size = DB_ID_SIZE, .mv_data = (void *)id};
     MDB_val v   = {0};
-    int     mrc = mdb_get(txn, DB->db_user, &k, &v);
+    int     mrc = mdb_get(txn, DB->db_user_id2data, &k, &v);
     if(mrc != MDB_SUCCESS)
     {
         mdb_txn_abort(txn);
@@ -162,7 +162,7 @@ int db_user_find_by_ids(size_t        n_users,
         }
 
         MDB_cursor *cur = NULL;
-        if(mdb_cursor_open(txn, DB->db_user, &cur) != MDB_SUCCESS)
+        if(mdb_cursor_open(txn, DB->db_user_id2data, &cur) != MDB_SUCCESS)
         {
             free(ids_sorted);
             mdb_txn_abort(txn);
@@ -244,7 +244,7 @@ int db_user_find_by_ids(size_t        n_users,
         const uint8_t *id = &ids_flat[i * DB_ID_SIZE];
         MDB_val        k  = {.mv_size = DB_ID_SIZE, .mv_data = (void *)id};
         MDB_val        v  = {0};
-        mrc               = mdb_get(txn, DB->db_user, &k, &v);
+        mrc               = mdb_get(txn, DB->db_user_id2data, &k, &v);
         if(mrc != MDB_SUCCESS)
         {
             mdb_txn_abort(txn);
@@ -273,7 +273,7 @@ int db_user_find_by_email(const char email[DB_EMAIL_MAX_LEN],
 
     MDB_val k   = {.mv_size = strlen(email), .mv_data = (void *)email};
     MDB_val v   = {0};
-    int     mrc = mdb_get(txn, DB->db_user_email2id, &k, &v);
+    int     mrc = mdb_get(txn, DB->db_user_mail2id, &k, &v);
     if(mrc != MDB_SUCCESS)
     {
         mdb_txn_abort(txn);
@@ -315,7 +315,7 @@ retry_chunk:
     MDB_val k_email2id = {.mv_size = elen, .mv_data = (void *)email};
     MDB_val v_email2id = {.mv_size = DB_ID_SIZE, .mv_data = NULL};
 
-    mrc = mdb_put(txn, DB->db_user_email2id, &k_email2id, &v_email2id,
+    mrc = mdb_put(txn, DB->db_user_mail2id, &k_email2id, &v_email2id,
                   db_email_put_flags);
     if(mrc == MDB_MAP_FULL)
     {
@@ -341,7 +341,8 @@ retry_chunk:
     {
         uuid_v7(id);
         k_id.mv_data = id;
-        mrc = mdb_put(txn, DB->db_user, &k_id, &v_up, db_user_put_flags);
+        mrc =
+            mdb_put(txn, DB->db_user_id2data, &k_id, &v_up, db_user_put_flags);
         if(mrc == MDB_KEYEXIST)
         {
             /* ultra-rare: regenerate and retry */
@@ -423,7 +424,7 @@ retry_chunk:
         MDB_val k_e = {.mv_size = elen, .mv_data = (void *)ei};
         MDB_val v_e = {.mv_size = DB_ID_SIZE, .mv_data = NULL};
 
-        mrc = mdb_put(txn, DB->db_user_email2id, &k_e, &v_e, email_put_flags);
+        mrc = mdb_put(txn, DB->db_user_mail2id, &k_e, &v_e, email_put_flags);
         if(mrc == MDB_KEYEXIST)
         {
             continue; /* duplicate: skip this email */
@@ -449,7 +450,7 @@ retry_chunk:
         MDB_val k_u = {.mv_size = DB_ID_SIZE, .mv_data = id};
         MDB_val v_u = {.mv_size = (size_t)(3 + elen), .mv_data = NULL};
 
-        mrc = mdb_put(txn, DB->db_user, &k_u, &v_u, user_put_flags);
+        mrc = mdb_put(txn, DB->db_user_id2data, &k_u, &v_u, user_put_flags);
         if(mrc == MDB_MAP_FULL)
         {
             mdb_txn_abort(txn);
@@ -500,7 +501,7 @@ int db_user_list_all(uint8_t *out_ids, size_t *inout_count_max)
     if(mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn) != MDB_SUCCESS)
         return -EIO;
     MDB_cursor *cur;
-    if(mdb_cursor_open(txn, DB->db_user, &cur) != MDB_SUCCESS)
+    if(mdb_cursor_open(txn, DB->db_user_id2data, &cur) != MDB_SUCCESS)
     {
         mdb_txn_abort(txn);
         return -EIO;
@@ -532,7 +533,7 @@ int db_user_list_publishers(uint8_t *out_ids, size_t *inout_count_max)
     if(mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn) != MDB_SUCCESS)
         return -EIO;
     MDB_cursor *cur;
-    if(mdb_cursor_open(txn, DB->db_user, &cur) != MDB_SUCCESS)
+    if(mdb_cursor_open(txn, DB->db_user_id2data, &cur) != MDB_SUCCESS)
     {
         mdb_txn_abort(txn);
         return -EIO;
@@ -571,7 +572,7 @@ int db_user_list_viewers(uint8_t *out_ids, size_t *inout_count_max)
     if(mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn) != MDB_SUCCESS)
         return -EIO;
     MDB_cursor *cur;
-    if(mdb_cursor_open(txn, DB->db_user, &cur) != MDB_SUCCESS)
+    if(mdb_cursor_open(txn, DB->db_user_id2data, &cur) != MDB_SUCCESS)
     {
         mdb_txn_abort(txn);
         return -EIO;
@@ -600,57 +601,81 @@ int db_user_list_viewers(uint8_t *out_ids, size_t *inout_count_max)
     return 0;
 }
 
-int db_user_share_data_with_user_email(uint8_t    owner[DB_ID_SIZE],
-                                       uint8_t    data_id[DB_ID_SIZE],
-                                       const char email[DB_EMAIL_MAX_LEN])
+int db_user_share_data_with_user_email(const uint8_t owner[DB_ID_SIZE],
+                                       const uint8_t data_id[DB_ID_SIZE],
+                                       const char    email[DB_EMAIL_MAX_LEN])
 {
     if(!owner || !data_id || !email || email[0] == '\0')
         return -EINVAL;
 
-    uint8_t target_user_id[DB_ID_SIZE] = {0};
+    uint8_t target[DB_ID_SIZE] = {0};
 
-retry_chunk:
-    /* Resolve recipient */
+    /* Resolve recipient once (outside txn ok; id is stable). */
     {
-        int frc = db_user_find_by_email(email, target_user_id);
-        if(frc != 0)
-            return frc; /* -ENOENT / -EIO / -EINVAL */
+        int rc = db_user_find_by_email(email, target);
+        if(rc != 0)
+            return rc; /* -ENOENT / -EIO / -EINVAL */
     }
 
-    /* One RW transaction for existence check + ACL checks + grant */
-    MDB_txn *txn;
+    /* No-op if trying to share to self */
+    if(memcmp(owner, target, DB_ID_SIZE) == 0)
+        return 0;
+
+retry_txn:
+    MDB_txn *txn = NULL;
     if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS)
         return -EIO;
 
     /* Ensure data exists */
     {
-        MDB_val k   = {.mv_size = DB_ID_SIZE, .mv_data = data_id};
-        MDB_val v   = {0};
-        int     mrc = mdb_get(txn, DB->db_data_meta, &k, &v);
-        if(mrc == MDB_NOTFOUND)
+        MDB_val k  = {.mv_size = DB_ID_SIZE, .mv_data = (void *)data_id};
+        MDB_val v  = {0};
+        int     rc = mdb_get(txn, DB->db_data_id2meta, &k, &v);
+        if(rc == MDB_NOTFOUND)
         {
             mdb_txn_abort(txn);
             return -ENOENT;
         }
-        if(mrc != MDB_SUCCESS || v.mv_size != sizeof(DataMeta))
+        if(rc != MDB_SUCCESS || v.mv_size != sizeof(DataMeta))
         {
             mdb_txn_abort(txn);
             return -EIO;
         }
     }
 
-    /* Sharer must have any of O/S/U on this data */
-    if(acl_has_any_txn(txn, owner, data_id) != 0)
+    /* Policy (MVP): only OWNERS can share; recipients get VIEW; no re-share. */
     {
-        mdb_txn_abort(txn);
-        return -EPERM;
+        int rc = acl_has_owner(txn, owner, data_id);
+        if(rc != 0)
+        {
+            mdb_txn_abort(txn);
+            return -EPERM;
+        } /* not an owner */
     }
 
-    /* Presence in 'U' (view) namespace for recipient */
-    if(acl_grant_txn(txn, target_user_id, ACL_RTYPE_USER, data_id) != 0)
+    /* If recipient already has any access, we’re done (idempotent). */
     {
-        mdb_txn_abort(txn);
-        return -EIO;
+        int rc = acl_has_any(txn, target, data_id);
+        if(rc == 0)
+        {
+            mdb_txn_abort(txn);
+            return 0;
+        }
+        if(rc != -ENOENT)
+        {
+            mdb_txn_abort(txn);
+            return rc;
+        }
+    }
+
+    /* Grant VIEW to recipient (writes forward+reverse; idempotent). */
+    {
+        int rc = acl_grant_view(txn, target, data_id);
+        if(rc != 0)
+        {
+            mdb_txn_abort(txn);
+            return rc;
+        }
     }
 
     int mrc = mdb_txn_commit(txn);
@@ -659,13 +684,11 @@ retry_chunk:
         int grc = db_env_mapsize_expand();
         if(grc != 0)
             return db_map_mdb_err(grc);
-        goto retry_chunk;
+        goto retry_txn;
     }
     if(mrc != MDB_SUCCESS)
-    {
-        /* txn is already aborted/freed on commit error */
         return db_map_mdb_err(mrc);
-    }
+
     return 0;
 }
 
@@ -731,7 +754,7 @@ retry_chunk:;
         return -EIO;
 
     MDB_cursor *cur = NULL;
-    if(mdb_cursor_open(txn, DB->db_user, &cur) != MDB_SUCCESS)
+    if(mdb_cursor_open(txn, DB->db_user_id2data, &cur) != MDB_SUCCESS)
     {
         mdb_txn_abort(txn);
         return -EIO;

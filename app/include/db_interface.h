@@ -114,9 +114,9 @@ int db_user_find_by_email(const char email[DB_EMAIL_MAX_LEN],
  * @param email Recipient email.
  * @return 0 on success, -ENOENT if user or data missing, -EIO on DB error, -EPERM on ACL.
  */
-int db_user_share_data_with_user_email(uint8_t    owner[DB_ID_SIZE],
-                                       uint8_t    data_id[DB_ID_SIZE],
-                                       const char email[DB_EMAIL_MAX_LEN]);
+int db_user_share_data_with_user_email(const uint8_t owner[DB_ID_SIZE],
+                                       const uint8_t data_id[DB_ID_SIZE],
+                                       const char    email[DB_EMAIL_MAX_LEN]);
 
 /**
  * @brief Update a user's role in the DB to viewer.

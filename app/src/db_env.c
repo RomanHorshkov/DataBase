@@ -16,16 +16,16 @@
  */
 
 /* Logical names of LMDB sub-databases */
-#define DB_USER          "user"          /* key=id(16), val=UserPacked */
-#define DB_USER_EMAIL2ID "user_email2id" /* key=email , val=id(16) */
-#define DB_DATA_META     "data_meta"     /* key=data_id(16) , val=DataMeta */
-#define DB_SHA2DATA      "sha2data"      /* key=sha(32) , val=data_id(16) */
+#define DB_USER_ID2DATA "user_id2data" /* key = id(16),  val = UserPacked */
+#define DB_USER_MAIL2ID "user_mail2id" /* key = email,   val = id(16) */
+#define DB_DATA_ID2META "data_id2meta" /* key = id(16),  val = DataMeta */
+#define DB_DATA_SHA2ID  "data_sha2id"  /* key = sha(32), val = id(16) */
 
 /* Presence-only ACL DBs */
 #define DB_ACL_FWD \
-    "acl_fwd" /* key=principal(16)|rtype(1)|data(16), val=uint8_t sentinel */
-#define DB_ACL_BY_RES \
-    "acl_by_res" /* key=data(16)|rtype(1),              val=principal(16) */
+    "acl_fwd" /* key = principal(16)|rtype(1)|data(16), val = uint8_t sentinel */
+#define DB_ACL_REL \
+    "acl_rel" /* key=data(16)|rtype(1),            val = principal(16) */
 
 /****************************************************************************
  * PRIVATE STUCTURED VARIABLES
@@ -45,8 +45,19 @@ struct DB *DB = NULL;
  * PRIVATE FUNCTIONS PROTOTYPES
  ****************************************************************************
  */
+
+/**
+ * @brief The db_data_ensure_layout function is a static utility that ensures
+ * the directory structure for a database is properly set up under the
+ * specified root path. It creates the necessary directories
+ * (root, root/objects/sha256, and root/meta) with appropriate permissions,
+ * returning -EIO if any directory creation fails for reasons other than the
+ * directory already existing.
+ */
 static int db_data_ensure_layout(const char *root);
+
 static int db_env_setup_and_open(const char *root_dir, size_t mapsize_bytes);
+
 static int db_env_mapsize_set(uint64_t mapsize_bytes);
 
 /****************************************************************************
@@ -62,7 +73,7 @@ int db_open(const char *root_dir, size_t mapsize_bytes)
 
     int erc = db_data_ensure_layout(root_dir);
     if(erc != 0)
-        return erc; /* already -EIO */
+        return erc;
 
     DB = calloc(1, sizeof(struct DB));
     if(!DB)
@@ -85,24 +96,25 @@ int db_open(const char *root_dir, size_t mapsize_bytes)
     if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS)
         goto fail_env;
 
-    if(mdb_dbi_open(txn, DB_USER, MDB_CREATE, &DB->db_user) != MDB_SUCCESS)
-        goto fail;
-    if(mdb_dbi_open(txn, DB_USER_EMAIL2ID, MDB_CREATE, &DB->db_user_email2id) !=
+    if(mdb_dbi_open(txn, DB_USER_ID2DATA, MDB_CREATE, &DB->db_user_id2data) !=
        MDB_SUCCESS)
         goto fail;
-    if(mdb_dbi_open(txn, DB_DATA_META, MDB_CREATE, &DB->db_data_meta) !=
+    if(mdb_dbi_open(txn, DB_USER_MAIL2ID, MDB_CREATE, &DB->db_user_mail2id) !=
        MDB_SUCCESS)
         goto fail;
-    if(mdb_dbi_open(txn, DB_SHA2DATA, MDB_CREATE, &DB->db_sha2data) !=
+    if(mdb_dbi_open(txn, DB_DATA_ID2META, MDB_CREATE, &DB->db_data_id2meta) !=
+       MDB_SUCCESS)
+        goto fail;
+    if(mdb_dbi_open(txn, DB_DATA_SHA2ID, MDB_CREATE, &DB->db_data_sha2id) !=
        MDB_SUCCESS)
         goto fail;
 
-    /* ACLs: forward (presence sentinel) + reverse (dupsort, dupfixed) */
+    /* ACLs: forward (presence sentinel) + relations (dupsort, dupfixed) */
     if(mdb_dbi_open(txn, DB_ACL_FWD, MDB_CREATE, &DB->db_acl_fwd) !=
        MDB_SUCCESS)
         goto fail;
-    if(mdb_dbi_open(txn, DB_ACL_BY_RES, MDB_CREATE | MDB_DUPSORT | MDB_DUPFIXED,
-                    &DB->db_acl_by_res) != MDB_SUCCESS)
+    if(mdb_dbi_open(txn, DB_ACL_REL, MDB_CREATE | MDB_DUPSORT | MDB_DUPFIXED,
+                    &DB->db_acl_rel) != MDB_SUCCESS)
         goto fail;
 
     if(mdb_txn_commit(txn) != MDB_SUCCESS)

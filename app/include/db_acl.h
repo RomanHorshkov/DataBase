@@ -2,40 +2,66 @@
 #define DB_ACL_H
 
 #include "db_int.h"
+#include <stdint.h>
 
-/** 
- * @brief Generate a forward ACL key.
- * 33 bytes: principal(16) | rtype(1) | resource(16)
- * @param out Output buffer [33 bytes].
- * @param principal Principal ID [16 bytes].
- * @param rtype Relationship type (one of 'O', 'S', 'U').
- * @param resource Resource ID [16 bytes].
- * @return void
- * 
- */
-void acl_fwd_key(uint8_t out[33], const uint8_t principal[DB_ID_SIZE],
-                 char rtype, const uint8_t resource[DB_ID_SIZE]);
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
-/**
- * @brief Generate a reverse ACL key.
- * 17 bytes: resource(16) | rtype(1)
- * @param out Output buffer [17 bytes].
- * @param resource Resource ID [16 bytes].
- * @param rtype Relationship type (one of 'O', 'S', 'U').
- * @return void
- */
-void acl_rev_key(uint8_t out[17], const uint8_t resource[DB_ID_SIZE],
-                 char rtype);
-/** Grant presence in both forward and reverse ACL DBs (same txn). */
-int acl_grant_txn(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE], char rtype,
+/* Public relation tags (only exposed in callbacks). */
+typedef enum
+{
+    ACL_REL_OWNER = 'O',
+    ACL_REL_SHARE = 'S',
+    ACL_REL_VIEW  = 'V'
+} acl_rel_t;
+
+/* ----------------------------- Grants / Revokes ---------------------------- */
+
+int acl_grant_owner(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
+                    const uint8_t resource[DB_ID_SIZE]);
+
+int acl_grant_share(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
+                    const uint8_t resource[DB_ID_SIZE]);
+
+int acl_grant_view(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
+                   const uint8_t resource[DB_ID_SIZE]);
+
+int acl_revoke_owner(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
+                     const uint8_t resource[DB_ID_SIZE]);
+
+int acl_revoke_share(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
+                     const uint8_t resource[DB_ID_SIZE]);
+
+int acl_revoke_view(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
+                    const uint8_t resource[DB_ID_SIZE]);
+
+/* ------------------------------- Checks ----------------------------------- */
+
+int acl_has_owner(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
                   const uint8_t resource[DB_ID_SIZE]);
 
-/** Check forward presence (returns 0 if present, -ENOENT if absent). */
-int acl_check_present_txn(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                          char rtype, const uint8_t resource[DB_ID_SIZE]);
+int acl_has_share(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
+                  const uint8_t resource[DB_ID_SIZE]);
 
-/** Effective access if present in any of {O,S,U}. */
-int acl_has_any_txn(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                    const uint8_t resource[DB_ID_SIZE]);
+int acl_has_view(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
+                 const uint8_t resource[DB_ID_SIZE]);
+
+int acl_has_any(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
+                const uint8_t resource[DB_ID_SIZE]);
+
+/* ---------------------------- Listing (forward) ---------------------------- */
+
+/* Callback for acl_list_data_for_user.
+ * Return 0 to continue, non-zero to stop early.
+ * 'rel' is one of ACL_REL_* (O/S/V). */
+typedef int (*acl_iter_cb)(const uint8_t resource[DB_ID_SIZE], uint8_t rel,
+                           void* user);
+
+int acl_list_data_for_user(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
+                           acl_iter_cb cb, void* user);
+
+int acl_data_destroy(MDB_txn* txn, const uint8_t resource[DB_ID_SIZE]);
 
 #endif /* DB_ACL_H */

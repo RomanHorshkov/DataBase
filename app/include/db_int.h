@@ -33,10 +33,6 @@ extern "C"
  */
 
 /* -------------------------- ACL namespaces -------------------------------- */
-/* Presence-only ACL rtype namespaces */
-#define ACL_RTYPE_OWNER     'O' /* owner */
-#define ACL_RTYPE_SHARE     'S' /* share/reshare */
-#define ACL_RTYPE_USER      'U' /* view */
 
 /* --------------------------- User roles ----------------------------------- */
 #define USER_ROLE_NONE      0u
@@ -55,16 +51,15 @@ struct DB
     char     root[1024]; /* Root directory */
     MDB_env *env;        /* LMDB environment */
 
-    MDB_dbi db_user;          /* User DBI */
-    MDB_dbi db_user_email2id; /* Email -> ID DBI */
-    MDB_dbi db_data_meta;     /* Data meta DBI */
-    MDB_dbi db_sha2data;      /* SHA -> data_id DBI */
+    MDB_dbi db_user_id2data; /* User DBI */
+    MDB_dbi db_user_mail2id; /* Email -> ID DBI */
+    MDB_dbi db_data_id2meta; /* Data meta DBI */
+    MDB_dbi db_data_sha2id;  /* SHA -> data_id DBI */
 
-    /* Presence-only ACLs */
     MDB_dbi
         db_acl_fwd; /* key=principal(16)|rtype(1)|data(16), val=uint8_t(1) */
     MDB_dbi
-        db_acl_by_res; /* key=data(16)|rtype(1), val=principal(16) (dupsort, dupfixed) */
+        db_acl_rel; /* key=data(16)|rtype(1), val=principal(16) (dupsort, dupfixed) */
 
     /* Stats and health */
     size_t map_size_bytes;

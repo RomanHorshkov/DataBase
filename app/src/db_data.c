@@ -80,7 +80,7 @@ int db_data_get_meta(uint8_t data_id[DB_ID_SIZE], DataMeta *out_meta)
 
     MDB_val k   = {.mv_size = DB_ID_SIZE, .mv_data = data_id};
     MDB_val v   = {0};
-    int     mrc = mdb_get(txn, DB->db_data_meta, &k, &v);
+    int     mrc = mdb_get(txn, DB->db_data_id2meta, &k, &v);
     if(mrc != MDB_SUCCESS)
     {
         mdb_txn_abort(txn);
@@ -151,11 +151,11 @@ retry_chunk:
     if(mrc != MDB_SUCCESS)
         return db_map_mdb_err(mrc);
 
-    /* sha -> data, make sure unique exists */
+    /* sha -> id, make sure unique exists */
     MDB_val shak = {.mv_size = 32, .mv_data = (void *)digest.b};
-    MDB_val shav = {.mv_size = sizeof(DataMeta), .mv_data = NULL};
+    MDB_val shav = {.mv_size = DB_ID_SIZE, .mv_data = NULL};
 
-    mrc = mdb_put(txn, DB->db_sha2data, &shak, &shav, db_sha2id_put_flags);
+    mrc = mdb_put(txn, DB->db_data_sha2id, &shak, &shav, db_sha2id_put_flags);
     if(mrc == MDB_MAP_FULL)
     {
         mdb_txn_abort(txn);
@@ -169,14 +169,14 @@ retry_chunk:
         mdb_txn_abort(txn);
         return db_map_mdb_err(mrc);
     }
-    /* new object generate id, write it into reserved sha->id slot */
+    /* generate new id, write it into reserved sha->id slot */
     uuid_v7(data_id);
-    memcpy(shav.mv_data, data_id, DB_ID_SIZE);
 
     MDB_val datak = {.mv_size = DB_ID_SIZE, .mv_data = (void *)data_id};
     MDB_val datav = {.mv_size = sizeof(DataMeta), .mv_data = NULL};
 
-    mrc = mdb_put(txn, DB->db_data_meta, &datak, &datav, db_dataid_put_flags);
+    mrc =
+        mdb_put(txn, DB->db_data_id2meta, &datak, &datav, db_dataid_put_flags);
     if(mrc == MDB_MAP_FULL)
     {
         mdb_txn_abort(txn);
@@ -190,15 +190,28 @@ retry_chunk:
         mdb_txn_abort(txn);
         return db_map_mdb_err(mrc);
     }
+
+    /* write new id into reserved sha->id slot */
+    memcpy(shav.mv_data, data_id, DB_ID_SIZE);
 
     /* fill DataMeta in-place (no stack buffer) */
     write_data_meta(datav.mv_data, &digest, mime, (uint64_t)total, now_secs(),
                     owner);
 
-    if(acl_grant_txn(txn, owner, ACL_RTYPE_OWNER, data_id) != 0)
+    mrc = acl_grant_owner(txn, owner, data_id);
+
+    if(mrc == MDB_MAP_FULL)
     {
         mdb_txn_abort(txn);
-        return -EIO;
+        int grc = db_env_mapsize_expand(); /* grow */
+        if(grc != 0)
+            return db_map_mdb_err(grc); /* stop if grow failed */
+        goto retry_chunk;               /* retry whole chunk */
+    }
+    if(mrc != 0)
+    {
+        mdb_txn_abort(txn);
+        return db_map_mdb_err(mrc);
     }
 
     mrc = mdb_txn_commit(txn);
@@ -225,19 +238,13 @@ int db_data_delete(const uint8_t owner[DB_ID_SIZE],
     if(!owner || !data_id)
         return -EINVAL;
 
-retry_chunk:
-    MDB_txn *txn;
+    MDB_txn *txn = NULL;
     if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS)
         return -EIO;
 
-    /* Owner check: owner must have presence in 'O' */
+    /* must be owner */
     {
-        int rc = acl_check_present_txn(txn, owner, ACL_RTYPE_OWNER, data_id);
-        if(rc == -ENOENT)
-        {
-            mdb_txn_abort(txn);
-            return -EPERM;
-        }
+        int rc = acl_has_owner(txn, owner, data_id);
         if(rc != 0)
         {
             mdb_txn_abort(txn);
@@ -245,12 +252,12 @@ retry_chunk:
         }
     }
 
-    /* Ensure data exists & get meta for blob path */
+    /* fetch meta (for blob path) */
     DataMeta meta = {0};
     {
         MDB_val k  = {.mv_size = DB_ID_SIZE, .mv_data = (void *)data_id};
         MDB_val v  = {0};
-        int     rc = mdb_get(txn, DB->db_data_meta, &k, &v);
+        int     rc = mdb_get(txn, DB->db_data_id2meta, &k, &v);
         if(rc == MDB_NOTFOUND)
         {
             mdb_txn_abort(txn);
@@ -264,92 +271,37 @@ retry_chunk:
         memcpy(&meta, v.mv_data, sizeof meta);
     }
 
-    /* For each rtype, repeatedly position on (data|rtype), delete one dup at a time,
-    i.e. dereference the relationships between users and this data */
-    const char rtypes[3] = {ACL_RTYPE_OWNER, ACL_RTYPE_SHARE, ACL_RTYPE_USER};
-    for(size_t i = 0; i < 3; ++i)
+    /* nuke all ACLs for this data */
     {
-        char    rt = rtypes[i];
-        uint8_t rkey[17];
-        acl_rev_key(rkey, data_id, rt);
-
-        MDB_cursor *cur = NULL;
-        if(mdb_cursor_open(txn, DB->db_acl_by_res, &cur) != MDB_SUCCESS)
+        int rc = acl_data_destroy(txn, data_id);
+        if(rc != 0)
         {
             mdb_txn_abort(txn);
-            return -EIO;
+            return rc;
         }
-
-        MDB_val k = {.mv_size = sizeof rkey, .mv_data = rkey};
-        MDB_val v = {0};
-
-        for(;;)
-        {
-            int rc = mdb_cursor_get(cur, &k, &v, MDB_SET_KEY);
-            if(rc == MDB_NOTFOUND)
-                break; /* no more dupset for this rtype */
-            if(rc != MDB_SUCCESS)
-            {
-                mdb_cursor_close(cur);
-                mdb_txn_abort(txn);
-                return -EIO;
-            }
-
-            if(v.mv_size == DB_ID_SIZE)
-            {
-                uint8_t principal[DB_ID_SIZE];
-                memcpy(principal, v.mv_data, DB_ID_SIZE);
-                uint8_t fkey[33];
-                acl_fwd_key(fkey, principal, rt, data_id);
-                MDB_val fk = {.mv_size = sizeof fkey, .mv_data = fkey};
-
-                /* delete forward pair */
-                (void)mdb_del(txn, DB->db_acl_fwd, &fk, NULL);
-
-                /* delete this exact reverse dup */
-                (void)mdb_del(txn, DB->db_acl_by_res, &k, &v);
-            }
-            /* loop repositions with MDB_SET_KEY until dupset exhausted */
-        }
-
-        mdb_cursor_close(cur);
     }
 
-    /* Delete sha->data mapping */
+    /* drop lookups */
     {
         MDB_val sk = {.mv_size = 32, .mv_data = meta.sha};
-        (void)mdb_del(txn, DB->db_sha2data, &sk, NULL);
-    }
+        (void)mdb_del(txn, DB->db_data_sha2id, &sk, NULL);
 
-    /* Delete data_meta entry */
-    {
         MDB_val mk = {.mv_size = DB_ID_SIZE, .mv_data = (void *)data_id};
-        (void)mdb_del(txn, DB->db_data_meta, &mk, NULL);
+        (void)mdb_del(txn, DB->db_data_id2meta, &mk, NULL);
     }
 
     int mrc = mdb_txn_commit(txn);
-    if(mrc == MDB_MAP_FULL)
-    {
-        int grc = db_env_mapsize_expand();
-        if(grc != 0)
-            return db_map_mdb_err(grc); /* stop if grow failed */
-        goto retry_chunk;
-    }
     if(mrc != MDB_SUCCESS)
-    {
-        /* txn is already aborted/freed on commit error */
         return db_map_mdb_err(mrc);
-    }
 
-    /* Remove the blob (best-effort) */
+    /* best-effort unlink (DB is source of truth) */
     {
-        char   path[4096];
+        char   path[4096], hex[65];
         Sha256 d;
         memcpy(d.b, meta.sha, 32);
-        char hex[65];
         crypt_sha256_hex(&d, hex);
         if(path_sha256(path, sizeof path, DB->root, hex) == 0)
-            unlink(path); /* ignore errors; DB is source of truth */
+            (void)unlink(path);
     }
 
     return 0;
@@ -371,7 +323,7 @@ static int db_user_get_role(const uint8_t id[DB_ID_SIZE], user_role_t *out_role)
 
     MDB_val k   = {.mv_size = DB_ID_SIZE, .mv_data = (void *)id};
     MDB_val v   = {0};
-    int     mrc = mdb_get(txn, DB->db_user, &k, &v);
+    int     mrc = mdb_get(txn, DB->db_user_id2data, &k, &v);
     if(mrc != MDB_SUCCESS)
     {
         mdb_txn_abort(txn);
