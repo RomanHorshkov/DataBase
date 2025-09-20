@@ -30,7 +30,7 @@ static int tl_add_many_users_sample_lookup(void)
     const size_t SAMPLE =
         env_sz("STRESS_SAMPLE", 2000); /* lookups after insert */
 
-    char* emails = tu_generate_email_list_seq(N, "u_", "@x");
+    char* emails = tu_generate_email_list_seq(N, "u_", "@x.com");
     if(!emails)
     {
         tu_teardown_store(&ctx);
@@ -149,7 +149,7 @@ static int tl_db_measure_size(void)
     uint32_t psize = 0;
 
     size_t inserted  = 0;
-    size_t last_step = 0; /* 0..10 (we print when step advances to 1..10) */
+    size_t last_step = 0;
 
     while(inserted < N)
     {
@@ -160,7 +160,8 @@ static int tl_db_measure_size(void)
         for(size_t j = 0; j < m; ++j)
         {
             char* dst = batch + j * DB_EMAIL_MAX_LEN;
-            int   n = snprintf(dst, DB_EMAIL_MAX_LEN, "u_%zu@x", inserted + j);
+            int   n =
+                snprintf(dst, DB_EMAIL_MAX_LEN, "u_%zu@x.com", inserted + j);
             if(n <= 0 || n >= (int)DB_EMAIL_MAX_LEN)
             {
                 tu_failf(__FILE__, __LINE__, "email format overflow");

@@ -40,6 +40,31 @@ static int      db_user_get_role(const uint8_t id[DB_ID_SIZE],
                                  user_role_t  *out_role);
 static uint64_t now_secs(void);
 
+static inline void write_data_meta(void *dst, const Sha256 *digest,
+                                   const char *mime, uint64_t size,
+                                   uint64_t      created_at,
+                                   const uint8_t owner[DB_ID_SIZE])
+{
+    DataMeta *m = (DataMeta *)dst;
+    memset(m, 0, sizeof *m);
+    m->ver = DB_VER;
+    memcpy(m->sha, digest->b, 32);
+    snprintf(m->mime, sizeof m->mime, "%s",
+             (mime && *mime) ? mime : "application/octet-stream");
+    m->size       = size;
+    m->created_at = created_at;
+    memcpy(m->owner, owner, DB_ID_SIZE);
+}
+
+static inline int db_data_get_and_check_mem(const MDB_val *v, DataMeta *out)
+{
+    if(!v || v->mv_size != sizeof(DataMeta))
+        return -EINVAL;
+    if(out)
+        memcpy(out, v->mv_data, sizeof *out);
+    return 0;
+}
+
 /****************************************************************************
  * PUBLIC FUNCTIONS DEFINITIONS
  ****************************************************************************
@@ -61,15 +86,11 @@ int db_data_get_meta(uint8_t data_id[DB_ID_SIZE], DataMeta *out_meta)
         mdb_txn_abort(txn);
         return db_map_mdb_err(mrc);
     }
-    if(v.mv_size != sizeof(DataMeta))
-    {
-        mdb_txn_abort(txn);
-        return -EIO;
-    }
 
-    memcpy(out_meta, v.mv_data, sizeof *out_meta);
+    mrc = db_data_get_and_check_mem(&v, out_meta);
+
     mdb_txn_abort(txn);
-    return 0;
+    return mrc;
 }
 
 int db_data_get_path(uint8_t data_id[DB_ID_SIZE], char *out_path,
@@ -171,15 +192,8 @@ retry_chunk:
     }
 
     /* fill DataMeta in-place (no stack buffer) */
-    DataMeta *mp = (DataMeta *)datav.mv_data;
-    memset(mp, 0, sizeof *mp);
-    mp->ver = DB_VER;
-    memcpy(mp->sha, digest.b, 32);
-    snprintf(mp->mime, sizeof mp->mime, "%s",
-             (mime && *mime) ? mime : "application/octet-stream");
-    mp->size       = (uint64_t)total;
-    mp->created_at = now_secs();
-    memcpy(mp->owner, owner, DB_ID_SIZE);
+    write_data_meta(datav.mv_data, &digest, mime, (uint64_t)total, now_secs(),
+                    owner);
 
     if(acl_grant_txn(txn, owner, ACL_RTYPE_OWNER, data_id) != 0)
     {
@@ -348,9 +362,10 @@ retry_chunk:
 
 static int db_user_get_role(const uint8_t id[DB_ID_SIZE], user_role_t *out_role)
 {
-    if(!out_role)
+    if(!id || !out_role)
         return -EINVAL;
-    MDB_txn *txn;
+
+    MDB_txn *txn = NULL;
     if(mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn) != MDB_SUCCESS)
         return -EIO;
 
@@ -360,15 +375,17 @@ static int db_user_get_role(const uint8_t id[DB_ID_SIZE], user_role_t *out_role)
     if(mrc != MDB_SUCCESS)
     {
         mdb_txn_abort(txn);
-        return mrc;
+        return db_map_mdb_err(mrc == MDB_NOTFOUND ? MDB_NOTFOUND : mrc);
     }
-    if(v.mv_size != sizeof(UserPacked))
+
+    uint8_t role = 0;
+    if(db_user_get_and_check_mem(&v, NULL, &role, NULL, NULL, NULL) != 0)
     {
         mdb_txn_abort(txn);
         return -EIO;
     }
 
-    memcpy(out_role, &((UserPacked *)v.mv_data)->role, sizeof(user_role_t));
+    *out_role = (user_role_t)role;
     mdb_txn_abort(txn);
     return 0;
 }

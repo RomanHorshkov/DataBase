@@ -4,7 +4,19 @@
 #include <unistd.h>
 #include <string.h>
 #include <inttypes.h>
+#include <stdlib.h>
 #include "db_interface.h"
+
+#define CHECK(x)                              \
+    do                                        \
+    {                                         \
+        int __rc = (x);                       \
+        if(__rc)                              \
+        {                                     \
+            printf(#x " failed: %d\n", __rc); \
+            exit(1);                          \
+        }                                     \
+    } while(0)
 
 /* tiny helper to write a small blob to a temp file */
 static int make_blob(const char* path, const char* tag)
@@ -97,14 +109,14 @@ int main(void)
             UD[DB_ID_SIZE] = {0}, UE[DB_ID_SIZE] = {0}, UF[DB_ID_SIZE] = {0},
             UG[DB_ID_SIZE] = {0}, UH[DB_ID_SIZE] = {0};
 
-    db_add_user(alice, UA);
-    db_add_user(bob, UB);
-    db_add_user(carol, UC);
-    db_add_user(anton, UD);
-    db_add_user(luana, UE);
-    db_add_user(roman, UF);
-    db_add_user(luca, UG);
-    db_add_user(franco, UH);
+    CHECK(db_add_user(alice, UA));
+    CHECK(db_add_user(bob, UB));
+    CHECK(db_add_user(carol, UC));
+    CHECK(db_add_user(anton, UD));
+    CHECK(db_add_user(luana, UE));
+    CHECK(db_add_user(roman, UF));
+    CHECK(db_add_user(luca, UG));
+    CHECK(db_add_user(franco, UH));
 
     print_id("Alice", UA);
     print_id("Bob  ", UB);

@@ -183,7 +183,7 @@ int db_map_mdb_err(int mdb_rc)
             break;
 
         default:
-            return -EIO;
+            return -mdb_rc;
             break;
     }
 }

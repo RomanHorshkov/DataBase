@@ -66,7 +66,7 @@ void db_close(void);
  * @param out_id Output user ID.
  * @return 0 on insertion, -EEXIST if already existed, -EINVAL bad input, -EIO DB error.
  */
-int db_add_user(const char email[DB_EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE]);
+int db_add_user(char email[DB_EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE]);
 
 /**
  * @brief Insert a batch of users. If any present, fail.
@@ -74,8 +74,7 @@ int db_add_user(const char email[DB_EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE]);
  * @param email_flat User emails flat array
  * @return 0 on insertion, -EEXIST if already existed, -EINVAL bad input, -EIO DB error.
  */
-int db_add_users(size_t     n_users,
-                 const char email_flat[n_users * DB_EMAIL_MAX_LEN]);
+int db_add_users(size_t n_users, char email_flat[n_users * DB_EMAIL_MAX_LEN]);
 
 /**
  * @brief Look up a user by id and optionally return email.

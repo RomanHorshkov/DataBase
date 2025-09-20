@@ -63,7 +63,7 @@ int t_add_user_and_find(void)
         memset(id, 0, sizeof id);
         memset(id2, 0, sizeof id2);
 
-        const char *email_in = emails + i * DB_EMAIL_MAX_LEN;
+        char *email_in = emails + i * DB_EMAIL_MAX_LEN;
 
         /* add new user */
         EXPECT_EQ_RC(db_add_user(email_in, id), 0);
@@ -94,9 +94,9 @@ int t_roles_and_listing(void)
     }
     uint8_t ID_A[DB_ID_SIZE] = {0}, ID_B[DB_ID_SIZE] = {0};
     char    ea[DB_EMAIL_MAX_LEN];
-    snprintf(ea, sizeof ea, "%s", "a@x");
+    snprintf(ea, sizeof ea, "%s", "abc@xbc.com");
     char eb[DB_EMAIL_MAX_LEN];
-    snprintf(eb, sizeof eb, "%s", "b@x");
+    snprintf(eb, sizeof eb, "%s", "bbc@xbc.com");
     db_add_user(ea, ID_A);
     db_add_user(eb, ID_B);
 
@@ -139,7 +139,7 @@ int t_upload_requires_publisher(void)
     }
     uint8_t A[DB_ID_SIZE] = {0};
     char    ea[DB_EMAIL_MAX_LEN];
-    snprintf(ea, sizeof ea, "%s", "a@x");
+    snprintf(ea, sizeof ea, "%s", "a@x.com");
     int fd = tu_make_blob("./.tmp_blob.dcm", "shared-seed-001");
     EXPECT_TRUE(fd >= 0);
     uint8_t D[DB_ID_SIZE] = {0};
@@ -175,17 +175,19 @@ int t_dedup_same_sha(void)
         tu_failf(__FILE__, __LINE__, "setup failed");
         return -1;
     }
-    uint8_t A[DB_ID_SIZE] = {0};
-    char    ea[DB_EMAIL_MAX_LEN];
-    snprintf(ea, sizeof ea, "%s", "a@x");
-    db_add_user(ea, A);
-    db_user_set_role_publisher(A);
 
     int fd = tu_make_blob("./.tmp_blob2.dcm", "same-content");
     EXPECT_TRUE(fd >= 0);
     lseek(fd, 0, SEEK_SET);
     uint8_t D1[DB_ID_SIZE] = {0}, D2[DB_ID_SIZE] = {0};
-    int     rc = db_data_add_from_fd(A, fd, "application/dicom", D1);
+
+    uint8_t A[DB_ID_SIZE] = {0};
+    char    ea[DB_EMAIL_MAX_LEN];
+    snprintf(ea, sizeof ea, "%s", "a@x.com");
+
+    EXPECT_EQ_RC(db_add_user(ea, A), 0);
+    EXPECT_EQ_RC(db_user_set_role_publisher(A), 0);
+    int rc = db_data_add_from_fd(A, fd, "application/dicom", D1);
     EXPECT_EQ_RC(rc, 0);
 
     lseek(fd, 0, SEEK_SET);
@@ -209,9 +211,9 @@ int t_share_by_email(void)
     }
     uint8_t A[DB_ID_SIZE] = {0}, B[DB_ID_SIZE] = {0};
     char    e_alice[DB_EMAIL_MAX_LEN];
-    snprintf(e_alice, sizeof e_alice, "%s", "alice@x");
+    snprintf(e_alice, sizeof e_alice, "%s", "alice@x.com");
     char e_bob[DB_EMAIL_MAX_LEN];
-    snprintf(e_bob, sizeof e_bob, "%s", "bob@x");
+    snprintf(e_bob, sizeof e_bob, "%s", "bob@x.com");
     db_add_user(e_alice, A);
     db_add_user(e_bob, B);
     db_user_set_role_publisher(A);
@@ -240,7 +242,7 @@ int t_resolve_path_points_to_object(void)
     }
     uint8_t A[DB_ID_SIZE] = {0};
     char    ea[DB_EMAIL_MAX_LEN];
-    snprintf(ea, sizeof ea, "%s", "a@x");
+    snprintf(ea, sizeof ea, "%s", "a@x.com");
     db_add_user(ea, A);
     db_user_set_role_publisher(A);
 
@@ -273,11 +275,11 @@ int t_share_requires_relationship(void)
     /* Users */
     uint8_t A[DB_ID_SIZE] = {0}, B[DB_ID_SIZE] = {0}, Cc[DB_ID_SIZE] = {0};
     char    ea[DB_EMAIL_MAX_LEN];
-    snprintf(ea, sizeof ea, "%s", "a@x");
+    snprintf(ea, sizeof ea, "%s", "a@x.com");
     char eb[DB_EMAIL_MAX_LEN];
-    snprintf(eb, sizeof eb, "%s", "b@x");
+    snprintf(eb, sizeof eb, "%s", "b@x.com");
     char ec[DB_EMAIL_MAX_LEN];
-    snprintf(ec, sizeof ec, "%s", "c@x");
+    snprintf(ec, sizeof ec, "%s", "c@x.com");
     db_add_user(ea, A);
     db_add_user(eb, B);
     db_add_user(ec, Cc);
@@ -318,11 +320,11 @@ int t_owner_delete_cascade(void)
 
     uint8_t O[DB_ID_SIZE] = {0}, U1[DB_ID_SIZE] = {0}, U2[DB_ID_SIZE] = {0};
     char    eo[DB_EMAIL_MAX_LEN];
-    snprintf(eo, sizeof eo, "%s", "owner@x");
+    snprintf(eo, sizeof eo, "%s", "owner@x.com");
     char eu1[DB_EMAIL_MAX_LEN];
-    snprintf(eu1, sizeof eu1, "%s", "u1@x");
+    snprintf(eu1, sizeof eu1, "%s", "u1@x.com");
     char eu2[DB_EMAIL_MAX_LEN];
-    snprintf(eu2, sizeof eu2, "%s", "u2@x");
+    snprintf(eu2, sizeof eu2, "%s", "u2@x.com");
     db_add_user(eo, O);
     db_add_user(eu1, U1);
     db_add_user(eu2, U2);
@@ -377,9 +379,9 @@ int t_dedup_multi_owner_can_delete(void)
 
     uint8_t A[DB_ID_SIZE] = {0}, B[DB_ID_SIZE] = {0};
     char    ea[DB_EMAIL_MAX_LEN];
-    snprintf(ea, sizeof ea, "%s", "a@x");
+    snprintf(ea, sizeof ea, "%s", "a@x.com");
     char eb[DB_EMAIL_MAX_LEN];
-    snprintf(eb, sizeof eb, "%s", "b@x");
+    snprintf(eb, sizeof eb, "%s", "b@x.com");
     db_add_user(ea, A);
     db_user_set_role_publisher(A);
     db_add_user(eb, B);

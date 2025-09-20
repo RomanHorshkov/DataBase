@@ -73,13 +73,14 @@ struct DB
 
 extern struct DB *DB; /* defined in db_env.c */
 
-typedef uint16_t user_role_t;
+typedef uint8_t user_role_t;
 
 typedef struct __attribute__((packed))
 {
-    uint8_t     id[DB_ID_SIZE];          /* bytes user id */
-    char        email[DB_EMAIL_MAX_LEN]; /* bytes + zero-terminated email */
-    user_role_t role;                    /* 2 bytes role */
+    uint8_t     ver;              /* 1 byte version for future evolution */
+    user_role_t role;             /* 1 byte role */
+    uint8_t     email_len;        /* 1 byte email length */
+    char email[DB_EMAIL_MAX_LEN]; /* variable-length zero-terminated email */
 } UserPacked;
 
 /****************************************************************************
@@ -88,6 +89,10 @@ typedef struct __attribute__((packed))
 */
 int db_map_mdb_err(int mdb_rc);
 int db_env_mapsize_expand(void);
+
+int db_user_get_and_check_mem(const MDB_val *v, uint8_t *ver, uint8_t *role,
+                              uint8_t *email_len, char email[DB_EMAIL_MAX_LEN],
+                              uint8_t *out_size);
 
 #ifdef __cplusplus
 }
