@@ -1,15 +1,15 @@
 /**
  * @file uuid.c
  * @brief
- * 
+ *
  * @author  Roman Horshkov <roman.horshkov@gmail.com>
  * @date    2025
  * (c) 2025
  */
 
 #include "uuid.h"
-#include <stdatomic.h>
 #include <fcntl.h>
+#include <stdatomic.h>
 #include <unistd.h>
 #if defined(__linux__)
 /* try getrandom first (non-blocking semantics with urandom pool after init)*/
@@ -43,7 +43,7 @@ static _Atomic uint64_t g_v7_state = 0;
  */
 
 static inline uint64_t realtime_ms(void);
-static int             fill_random(void* p, size_t n);
+static int             fill_random(void *p, size_t n);
 
 /****************************************************************************
  * PUBLIC FUNCTIONS DEFINITIONS
@@ -51,8 +51,7 @@ static int             fill_random(void* p, size_t n);
  */
 int uuid_v4(uint8_t out[UUID_BYTES_SIZE])
 {
-    if(fill_random(out, 16) != 0)
-        return -1;
+    if(fill_random(out, 16) != 0) return -1;
     out[6] = (out[6] & 0x0F) | 0x40;  // version 4
     out[8] = (out[8] & 0x3F) | 0x80;  // variant RFC 4122 (10xx xxxx)
     return 0;
@@ -107,14 +106,13 @@ restart:
 
     /* Random 62 bits for the tail (rb) */
     uint8_t rb[8];
-    if(fill_random(rb, sizeof rb) != 0)
-        return -1;
+    if(fill_random(rb, sizeof rb) != 0) return -1;
 
     /* Layout per UUIDv7 (RFC 4122bis):
-       - 48-bit timestamp (big-endian)
-       - 4-bit version (7), 12-bit rand_a  -> we use seq here for monotonicity
-       - 2-bit variant (10), 62-bit rand_b
-    */
+     - 48-bit timestamp (big-endian)
+     - 4-bit version (7), 12-bit rand_a  -> we use seq here for monotonicity
+     - 2-bit variant (10), 62-bit rand_b
+  */
 
     /* timestamp 48-bit BE */
     out[0] = (uint8_t)((use_ms >> 40) & 0xFF);
@@ -139,15 +137,14 @@ restart:
     out[14] = rb[6];
     out[15] = rb[7];
 
-    if(memcmp(last_id, out, DB_ID_SIZE) == 0)
-        goto restart;
+    if(memcmp(last_id, out, DB_ID_SIZE) == 0) goto restart;
 
     return 0;
 }
 
 void uuid_to_hex(uint8_t id[UUID_BYTES_SIZE], char out32[33])
 {
-    static const char* h = "0123456789abcdef";
+    static const char *h = "0123456789abcdef";
     for(int i = 0; i < 16; ++i)
     {
         out32[i * 2]     = h[(id[i] >> 4) & 0xF];
@@ -168,12 +165,11 @@ static inline uint64_t realtime_ms(void)
     return (uint64_t)ts.tv_sec * 1000u + (uint64_t)(ts.tv_nsec / 1000000u);
 }
 
-static int fill_random(void* p, size_t n)
+static int fill_random(void *p, size_t n)
 {
 #if defined(__linux__)
     ssize_t r = getrandom(p, n, 0);
-    if(r == (ssize_t)n)
-        return 0;
+    if(r == (ssize_t)n) return 0;
 #endif
     int fd = open("/dev/urandom", O_RDONLY);
     if(fd >= 0)
@@ -181,7 +177,7 @@ static int fill_random(void* p, size_t n)
         size_t off = 0;
         while(off < n)
         {
-            ssize_t rd = read(fd, (uint8_t*)p + off, n - off);
+            ssize_t rd = read(fd, (uint8_t *)p + off, n - off);
             if(rd <= 0)
             {
                 close(fd);
@@ -194,6 +190,6 @@ static int fill_random(void* p, size_t n)
     }
     // very weak fallback
     for(size_t i = 0; i < n; ++i)
-        ((uint8_t*)p)[i] = (uint8_t)(0xA5 ^ (i * 41));
+        ((uint8_t *)p)[i] = (uint8_t)(0xA5 ^ (i * 41));
     return 0;
 }

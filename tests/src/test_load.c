@@ -1,17 +1,16 @@
 /* tests/src/test_load.c */
 
-#include <lmdb.h>
 #include <inttypes.h>  // for PRIu64
+#include <lmdb.h>
 
-#include "test_utils.h"
 #include "db_interface.h"
+#include "test_utils.h"
 
 /* helper: create file of `size` with deterministic content */
-static int make_blob_sized(const char* path, size_t size, uint32_t seed)
+static int make_blob_sized(const char *path, size_t size, uint32_t seed)
 {
     int fd = open(path, O_CREAT | O_RDWR | O_TRUNC, 0640);  // <-- O_RDWR
-    if(fd < 0)
-        return -1;
+    if(fd < 0) return -1;
 
     unsigned char hdr[16] = {'D', 'I', 'C', 'M', 0x00, 0x01, 0, 0,
                              0,   0,   0,   0,   0,    0,    0, 0};
@@ -38,8 +37,7 @@ static int make_blob_sized(const char* path, size_t size, uint32_t seed)
     while(written < size)
     {
         size_t chunk = size - written;
-        if(chunk > sizeof buf)
-            chunk = sizeof buf;
+        if(chunk > sizeof buf) chunk = sizeof buf;
         if(write(fd, buf, chunk) != (ssize_t)chunk)
         {
             close(fd);
@@ -52,11 +50,10 @@ static int make_blob_sized(const char* path, size_t size, uint32_t seed)
 }
 
 /* Env knobs (with safe defaults) */
-static size_t env_sz(const char* key, size_t def)
+static size_t env_sz(const char *key, size_t def)
 {
-    const char* s = getenv(key);
-    if(!s || !*s)
-        return def;
+    const char *s = getenv(key);
+    if(!s || !*s) return def;
     size_t v = strtoull(s, NULL, 10);
     return v > 0 ? v : def;
 }
@@ -74,14 +71,14 @@ static int tl_add_many_users_sample_lookup(void)
     const size_t SAMPLE =
         env_sz("STRESS_SAMPLE", 2000); /* lookups after insert */
 
-    char* emails = tu_generate_email_list_seq(N, "u_", "@x.com");
+    char *emails = tu_generate_email_list_seq(N, "u_", "@x.com");
     if(!emails)
     {
         tu_teardown_store(&ctx);
         tu_failf(__FILE__, __LINE__, "email alloc failed");
         return -1;
     }
-    char* subset = tu_generate_email_list_sub_seq(emails, N, SAMPLE);
+    char *subset = tu_generate_email_list_sub_seq(emails, N, SAMPLE);
     if(!subset)
     {
         free(emails);
@@ -90,7 +87,7 @@ static int tl_add_many_users_sample_lookup(void)
         return -1;
     }
 
-    uint8_t* ids = calloc(N, 16);
+    uint8_t *ids = calloc(N, 16);
     if(!ids)
     {
         free(emails);
@@ -181,7 +178,7 @@ static int tl_db_measure_size(void)
     }
 
     /* batch buffer */
-    char* batch = (char*)calloc(CHUNK, DB_EMAIL_MAX_LEN);
+    char *batch = (char *)calloc(CHUNK, DB_EMAIL_MAX_LEN);
     if(!batch)
     {
         tu_failf(__FILE__, __LINE__, "batch alloc failed");
@@ -203,7 +200,7 @@ static int tl_db_measure_size(void)
         /* generate emails for this chunk */
         for(size_t j = 0; j < m; ++j)
         {
-            char* dst = batch + j * DB_EMAIL_MAX_LEN;
+            char *dst = batch + j * DB_EMAIL_MAX_LEN;
             int   n =
                 snprintf(dst, DB_EMAIL_MAX_LEN, "u_%zu@x.com", inserted + j);
             if(n <= 0 || n >= (int)DB_EMAIL_MAX_LEN)
@@ -262,8 +259,9 @@ static int tl_db_measure_size(void)
     return 0;
 }
 
-/* Upload mixed sizes (100×1KiB, 100×1MiB, 100×10MiB), then share fanout with metrics.
- * Robust to individual upload failures: we count them and only share successful objects. */
+/* Upload mixed sizes (100×1KiB, 100×1MiB, 100×10MiB), then share fanout with
+ * metrics. Robust to individual upload failures: we count them and only share
+ * successful objects. */
 static int tl_upload_mixed_sizes_and_share_details(void)
 {
     /* knobs (env-tunable) */
@@ -284,7 +282,7 @@ static int tl_upload_mixed_sizes_and_share_details(void)
     }
 
     /* users pool */
-    char* emails = tu_generate_email_list_seq(NU, "mix_", "@x.com");
+    char *emails = tu_generate_email_list_seq(NU, "mix_", "@x.com");
     if(!emails)
     {
         tu_teardown_store(&ctx);
@@ -318,25 +316,25 @@ static int tl_upload_mixed_sizes_and_share_details(void)
 
     struct Bucket
     {
-        const char* name;
+        const char *name;
         size_t      n;
         size_t      bytes;
-        uint8_t*    dids;
-        uint8_t*    ok;
+        uint8_t    *dids;
+        uint8_t    *ok;
     };
     struct Bucket  b1         = {"1KiB", N1, S1, NULL, NULL};
     struct Bucket  b2         = {"1MiB", N2, S2, NULL, NULL};
     struct Bucket  b3         = {"10MiB", N3, S3, NULL, NULL};
-    struct Bucket* buckets[3] = {&b1, &b2, &b3};
+    struct Bucket *buckets[3] = {&b1, &b2, &b3};
 
     double   t_upload_total_ms = 0.0;
     uint64_t bytes_total_ok    = 0;
 
     for(int bi = 0; bi < 3; ++bi)
     {
-        struct Bucket* b = buckets[bi];
-        b->dids          = (uint8_t*)calloc(b->n, DB_ID_SIZE);
-        b->ok            = (uint8_t*)calloc(b->n, 1);
+        struct Bucket *b = buckets[bi];
+        b->dids          = (uint8_t *)calloc(b->n, DB_ID_SIZE);
+        b->ok            = (uint8_t *)calloc(b->n, 1);
         if(!b->dids || !b->ok)
         {
             tu_failf(__FILE__, __LINE__, "alloc ids/ok");
@@ -403,7 +401,7 @@ static int tl_upload_mixed_sizes_and_share_details(void)
         size_t total_ok = 0;
         for(int bi = 0; bi < 3; ++bi)
         {
-            struct Bucket* b = buckets[bi];
+            struct Bucket *b = buckets[bi];
             for(size_t i = 0; i < b->n; i++)
                 total_ok += (size_t)b->ok[i];
         }
@@ -427,15 +425,14 @@ static int tl_upload_mixed_sizes_and_share_details(void)
 
     for(int bi = 0; bi < 3; ++bi)
     {
-        struct Bucket* b  = buckets[bi];
+        struct Bucket *b  = buckets[bi];
         size_t         ok = 0, exist = 0, err = 0, ops = 0;
 
         double t0 = tu_now_ms();
         for(size_t i = 0; i < b->n; i++)
         {
-            if(!b->ok[i])
-                continue; /* skip failed uploads */
-            const uint8_t* did = b->dids + i * DB_ID_SIZE;
+            if(!b->ok[i]) continue; /* skip failed uploads */
+            const uint8_t *did = b->dids + i * DB_ID_SIZE;
             for(size_t s = 0; s < SHARES_PER_OBJ; s++)
             {
                 size_t uidx;
@@ -443,7 +440,7 @@ static int tl_upload_mixed_sizes_and_share_details(void)
                 {
                     uidx = (size_t)(rand() % (int)NU);
                 } while(uidx == 0); /* avoid owner */
-                const char* email = emails + uidx * DB_EMAIL_MAX_LEN;
+                const char *email = emails + uidx * DB_EMAIL_MAX_LEN;
                 int rc = db_user_share_data_with_user_email(owner, did, email);
                 if(rc == 0)
                     ok++;
@@ -502,7 +499,7 @@ static const TU_Test LOAD_TESTS[] = {
 
 static const size_t NLOAD = sizeof(LOAD_TESTS) / sizeof(LOAD_TESTS[0]);
 
-int run_test_load(int argc, char** argv)
+int run_test_load(int argc, char **argv)
 {
     return tu_run_suite("load", LOAD_TESTS, NLOAD, argc, argv);
 }

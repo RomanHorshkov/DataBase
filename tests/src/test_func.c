@@ -1,8 +1,8 @@
 /* src/tests/test_functionality.c */
 #include <sys/stat.h>
 
-#include "test_utils.h"
 #include "db_interface.h"
+#include "test_utils.h"
 
 static int is_zero16(const uint8_t x[16])
 {
@@ -390,7 +390,8 @@ int t_no_dedup_second_upload_fails_and_owner_deletes(void)
     /* First upload creates object */
     EXPECT_EQ_RC(db_data_add_from_fd(A, fd, "application/dicom", D1), 0);
 
-    /* Second upload by B with same bits: must fail (-EEXIST), out id untouched/zero */
+    /* Second upload by B with same bits: must fail (-EEXIST), out id
+   * untouched/zero */
     lseek(fd, 0, SEEK_SET);
     int rc = db_data_add_from_fd(B, fd, "application/dicom", D2);
     EXPECT_EQ_RC(rc, -EEXIST);
@@ -884,10 +885,8 @@ int t_list_publishers_viewers(void)
     bool foundB = false, foundC = false;
     for(size_t i = 0; i < nv; i++)
     {
-        if(memcmp(ids + i * 16, B, 16) == 0)
-            foundB = true;
-        if(memcmp(ids + i * 16, Cc, 16) == 0)
-            foundC = true;
+        if(memcmp(ids + i * 16, B, 16) == 0) foundB = true;
+        if(memcmp(ids + i * 16, Cc, 16) == 0) foundC = true;
     }
     EXPECT_TRUE(foundB && foundC);
 

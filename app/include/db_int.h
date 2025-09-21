@@ -1,6 +1,6 @@
 /**
  * @file db_int.h
- * @brief 
+ * @brief
  *
  * @author  Roman Horshkov <roman.horshkov@gmail.com>
  * @date    2025
@@ -13,9 +13,9 @@
 #include <errno.h>
 #include <lmdb.h>
 #include <stddef.h>
-#include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>  // unlink
@@ -42,15 +42,14 @@ extern "C"
 /****************************************************************************
  * PUBLIC STRUCTURED VARIABLES
  ****************************************************************************
-*/
+ */
 
-/* Handle for the whole store.  All LMDB databases live under <root>/meta,   */
-/* while content-addressed objects live under <root>/objects/sha256/.. .     */
 struct DB
 {
     char     root[1024]; /* Root directory */
     MDB_env *env;        /* LMDB environment */
 
+    /* data DBIs */
     MDB_dbi db_user_id2data; /* User DBI */
     MDB_dbi db_user_mail2id; /* Email -> ID DBI */
     MDB_dbi db_data_id2meta; /* Data meta DBI */
@@ -58,8 +57,12 @@ struct DB
 
     MDB_dbi
         db_acl_fwd; /* key=principal(16)|rtype(1)|data(16), val=uint8_t(1) */
-    MDB_dbi
-        db_acl_rel; /* key=data(16)|rtype(1), val=principal(16) (dupsort, dupfixed) */
+    MDB_dbi db_acl_rel; /* key=data(16)|rtype(1), val=principal(16) (dupsort,
+                         dupfixed) */
+
+    /* auth DBIs */
+    MDB_dbi db_user_pwd; /* user_id -> UserPwdHash */
+    MDB_dbi db_session;  /* sha256(token) -> SessionRec */
 
     /* Stats and health */
     size_t map_size_bytes;
@@ -81,7 +84,7 @@ typedef struct __attribute__((packed))
 /****************************************************************************
  * PUBLIC FUNCTIONS DECLARATIONS
  ****************************************************************************
-*/
+ */
 int db_map_mdb_err(int mdb_rc);
 int db_env_mapsize_expand(void);
 

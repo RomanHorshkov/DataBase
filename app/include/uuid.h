@@ -1,6 +1,6 @@
 /**
  * @file uuid.h
- * @brief 
+ * @brief
  *
  * @author  Roman Horshkov <roman.horshkov@gmail.com>
  * @date    2025
@@ -27,13 +27,13 @@ extern "C"
 /****************************************************************************
  * PUBLIC STRUCTURED VARIABLES
  ****************************************************************************
-*/
+ */
 /* None */
 
 /****************************************************************************
  * PUBLIC FUNCTIONS DECLARATIONS
  ****************************************************************************
-*/
+ */
 /**
  * @brief Generate a random v4 UUID.
  * @param val Output buffer [16 bytes].

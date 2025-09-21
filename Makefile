@@ -1,33 +1,37 @@
-# --- OpenSSL detection (required) ---
+# Require pkg-config
 PKGCONFIG := $(shell command -v pkg-config 2>/dev/null)
-
 ifeq ($(PKGCONFIG),)
-  OPENSSL_CFLAGS :=
-  OPENSSL_LIBS   := -lcrypto
-  OPENSSL_FOUND  := $(shell printf 'int main(void){return 0;}\n' | \
-                     $(CC) -x c - -o /dev/null -lcrypto >/dev/null 2>&1 && echo 1 || echo 0)
-else
-  OPENSSL_CFLAGS := $(shell pkg-config --cflags openssl 2>/dev/null)
-  OPENSSL_LIBS   := $(shell pkg-config --libs   openssl 2>/dev/null)
-  OPENSSL_FOUND  := $(shell pkg-config --exists openssl && echo 1 || echo 0)
+$(error pkg-config is required. Install: Debian/Ubuntu: sudo apt install pkg-config)
 endif
 
-# --- LMDB detection (required) ---
-ifeq ($(PKGCONFIG),)
-  LMDB_CFLAGS :=
-  LMDB_LIBS   := -llmdb
-  LMDB_FOUND  := $(shell printf '#include <lmdb.h>\nint main(){mdb_env_create(0);return 0;}\n' | \
-                   $(CC) -x c - -o /dev/null -llmdb >/dev/null 2>&1 && echo 1 || echo 0)
-else
-  LMDB_CFLAGS := $(shell pkg-config --cflags lmdb 2>/dev/null)
-  LMDB_LIBS   := $(shell pkg-config --libs   lmdb 2>/dev/null)
-  LMDB_FOUND  := $(shell pkg-config --exists lmdb && echo 1 || echo 0)
-  ifeq ($(LMDB_LIBS),)
-    LMDB_LIBS := -llmdb
-    LMDB_FOUND := $(shell printf '#include <lmdb.h>\nint main(){mdb_env_create(0);return 0;}\n' | \
-                     $(CC) -x c - -o /dev/null -llmdb >/dev/null 2>&1 && echo 1 || echo 0)
-  endif
+# --- OpenSSL ---
+OPENSSL_FOUND := $(shell pkg-config --exists openssl && echo 1 || echo 0)
+ifeq ($(OPENSSL_FOUND),0)
+$(error OpenSSL not found. Install: Debian/Ubuntu: sudo apt install libssl-dev)
 endif
+OPENSSL_CFLAGS := $(shell pkg-config --cflags openssl)
+OPENSSL_LIBS   := $(shell pkg-config --libs   openssl)
+
+# --- LMDB ---
+LMDB_FOUND := $(shell pkg-config --exists lmdb && echo 1 || echo 0)
+ifeq ($(LMDB_FOUND),0)
+$(error LMDB not found. Install: Debian/Ubuntu: sudo apt install liblmdb-dev)
+endif
+LMDB_CFLAGS := $(shell pkg-config --cflags lmdb)
+LMDB_LIBS   := $(shell pkg-config --libs   lmdb)
+
+# --- libsodium ---
+SODIUM_FOUND := $(shell pkg-config --exists libsodium && echo 1 || echo 0)
+ifeq ($(SODIUM_FOUND),0)
+$(error libsodium not found. Install: Debian/Ubuntu: sudo apt install libsodium-dev)
+endif
+SODIUM_CFLAGS := $(shell pkg-config --cflags libsodium)
+SODIUM_LIBS   := $(shell pkg-config --libs   libsodium)
+
+# --- Flags ---
+CFLAGS  += -O2 -Wall -Wextra -Wshadow -Wconversion -Werror $(INCLUDES) \
+           $(OPENSSL_CFLAGS) $(LMDB_CFLAGS) $(SODIUM_CFLAGS)
+LDFLAGS += $(OPENSSL_LIBS) $(LMDB_LIBS) $(SODIUM_LIBS)
 
 # --- Paths ---
 APP_DIR   := app
@@ -74,9 +78,6 @@ SRCS_TEST := \
 CORE_OBJS := $(patsubst $(APP_SRC)/%.c,$(OBJ_DIR)/%.o,$(CORE_SRCS))
 
 # --- Flags ---
-CFLAGS  += -O2 -Wall -Wextra -Wshadow -Wconversion -Werror $(INCLUDES) \
-           $(OPENSSL_CFLAGS) $(LMDB_CFLAGS)
-LDFLAGS += $(OPENSSL_LIBS) $(LMDB_LIBS)
 
 # --- Targets ---
 .PHONY: all clean test lib

@@ -1,6 +1,6 @@
 /**
  * @file db_env.c
- * @brief 
+ * @brief
  *
  * @author  Roman Horshkov <roman.horshkov@gmail.com>
  * @date    2025
@@ -20,10 +20,13 @@
 #define DB_USER_MAIL2ID "user_mail2id" /* key = email,   val = id(16) */
 #define DB_DATA_ID2META "data_id2meta" /* key = id(16),  val = DataMeta */
 #define DB_DATA_SHA2ID  "data_sha2id"  /* key = sha(32), val = id(16) */
+#define DB_USER_ID2PWD  "user_id2pwd"  /* key=user_id(16), val=UserPwdHash */
+#define DB_SESSION      "session" /* key=sha256(token)(32), val=SessionRec */
 
 /* Presence-only ACL DBs */
 #define DB_ACL_FWD \
-    "acl_fwd" /* key = principal(16)|rtype(1)|data(16), val = uint8_t sentinel */
+    "acl_fwd" /* key = principal(16)|rtype(1)|data(16), val = uint8_t sentinel   \
+             */
 #define DB_ACL_REL \
     "acl_rel" /* key=data(16)|rtype(1),            val = principal(16) */
 
@@ -68,16 +71,13 @@ static int db_env_mapsize_set(uint64_t mapsize_bytes);
 /** Initialize the environment, create sub-databases. */
 int db_open(const char *root_dir, size_t mapsize_bytes)
 {
-    if(!root_dir || mapsize_bytes == 0)
-        return -EINVAL;
+    if(!root_dir || mapsize_bytes == 0) return -EINVAL;
 
     int erc = db_data_ensure_layout(root_dir);
-    if(erc != 0)
-        return erc;
+    if(erc != 0) return erc;
 
     DB = calloc(1, sizeof(struct DB));
-    if(!DB)
-        return -ENOMEM;
+    if(!DB) return -ENOMEM;
 
     snprintf(DB->root, sizeof DB->root, "%s", root_dir);
 
@@ -93,8 +93,7 @@ int db_open(const char *root_dir, size_t mapsize_bytes)
         goto fail_env;
 
     MDB_txn *txn = NULL;
-    if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS)
-        goto fail_env;
+    if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS) goto fail_env;
 
     if(mdb_dbi_open(txn, DB_USER_ID2DATA, MDB_CREATE, &DB->db_user_id2data) !=
        MDB_SUCCESS)
@@ -117,6 +116,13 @@ int db_open(const char *root_dir, size_t mapsize_bytes)
                     &DB->db_acl_rel) != MDB_SUCCESS)
         goto fail;
 
+    /* Authentication DBIs */
+    if(mdb_dbi_open(txn, DB_USER_ID2PWD, MDB_CREATE, &DB->db_user_pwd) !=
+       MDB_SUCCESS)
+        goto fail;
+    if(mdb_dbi_open(txn, DB_SESSION, MDB_CREATE, &DB->db_session) !=
+       MDB_SUCCESS)
+        goto fail;
     if(mdb_txn_commit(txn) != MDB_SUCCESS)
     {
         mdb_txn_abort(txn);
@@ -135,8 +141,7 @@ fail_env:
 
 void db_close(void)
 {
-    if(!DB)
-        return;
+    if(!DB) return;
     mdb_env_close(DB->env);
     free(DB);
     DB = NULL;
@@ -144,31 +149,24 @@ void db_close(void)
 
 int db_env_mapsize_expand(void)
 {
-    if(!DB || !DB->env)
-        return -EIO;
+    if(!DB || !DB->env) return -EIO;
     uint64_t desired = DB->map_size_bytes * 2;
-    if(desired > DB->map_size_bytes_max)
-        return MDB_MAP_FULL;
+    if(desired > DB->map_size_bytes_max) return MDB_MAP_FULL;
     return db_env_mapsize_set(desired);
 }
 
 int db_env_metrics(uint64_t *used, uint64_t *mapsize, uint32_t *psize)
 {
-    if(!DB || !DB->env)
-        return -EINVAL;
+    if(!DB || !DB->env) return -EINVAL;
     MDB_envinfo info;
     MDB_stat    st;
     int         rc;
     rc = mdb_env_info(DB->env, &info);
-    if(rc != MDB_SUCCESS)
-        return -EIO;
+    if(rc != MDB_SUCCESS) return -EIO;
     rc = mdb_env_stat(DB->env, &st);
-    if(rc != MDB_SUCCESS)
-        return -EIO;
-    if(mapsize)
-        *mapsize = (uint64_t)info.me_mapsize;
-    if(psize)
-        *psize = (uint32_t)st.ms_psize;
+    if(rc != MDB_SUCCESS) return -EIO;
+    if(mapsize) *mapsize = (uint64_t)info.me_mapsize;
+    if(psize) *psize = (uint32_t)st.ms_psize;
     if(used)
         *used = ((uint64_t)info.me_last_pgno + 1ull) * (uint64_t)st.ms_psize;
     return 0;
@@ -210,24 +208,20 @@ static int db_data_ensure_layout(const char *root)
     char p[2048];
 
     snprintf(p, sizeof p, "%s", root);
-    if(mkdir_p(p, 0770) != 0 && errno != EEXIST)
-        return -EIO;
+    if(mkdir_p(p, 0770) != 0 && errno != EEXIST) return -EIO;
 
     snprintf(p, sizeof p, "%s/objects/sha256", root);
-    if(mkdir_p(p, 0770) != 0 && errno != EEXIST)
-        return -EIO;
+    if(mkdir_p(p, 0770) != 0 && errno != EEXIST) return -EIO;
 
     snprintf(p, sizeof p, "%s/meta", root);
-    if(mkdir_p(p, 0770) != 0 && errno != EEXIST)
-        return -EIO;
+    if(mkdir_p(p, 0770) != 0 && errno != EEXIST) return -EIO;
 
     return 0;
 }
 
 static int db_env_setup_and_open(const char *metadir, size_t mapsize_bytes)
 {
-    if(!DB || !DB->env)
-        return -EIO;
+    if(!DB || !DB->env) return -EIO;
 
     DB->map_size_bytes = mapsize_bytes;
 
@@ -236,16 +230,13 @@ static int db_env_setup_and_open(const char *metadir, size_t mapsize_bytes)
                                 : (uint64_t)mapsize_bytes * 8;
 
     int mrc = mdb_env_set_maxdbs(DB->env, 16);
-    if(mrc != MDB_SUCCESS)
-        return mrc;
+    if(mrc != MDB_SUCCESS) return mrc;
 
     mrc = db_env_mapsize_set(DB->map_size_bytes);
-    if(mrc != MDB_SUCCESS)
-        return mrc;
+    if(mrc != MDB_SUCCESS) return mrc;
 
     mrc = mdb_env_open(DB->env, metadir, 0, 0770);
-    if(mrc != MDB_SUCCESS)
-        return mrc;
+    if(mrc != MDB_SUCCESS) return mrc;
 
     return 0;
 }

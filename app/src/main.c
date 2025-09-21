@@ -1,11 +1,11 @@
 // test_main.c
-#include <stdio.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <string.h>
-#include <inttypes.h>
-#include <stdlib.h>
 #include "db_interface.h"
+#include <fcntl.h>
+#include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #define CHECK(x)                              \
     do                                        \
@@ -19,11 +19,10 @@
     } while(0)
 
 /* tiny helper to write a small blob to a temp file */
-static int make_blob(const char* path, const char* tag)
+static int make_blob(const char *path, const char *tag)
 {
     int fd = open(path, O_CREAT | O_RDWR | O_TRUNC, 0640);
-    if(fd < 0)
-        return -1;
+    if(fd < 0) return -1;
     const unsigned char head[] = {'D', 'I', 'C', 'M', 0x00, 0x01};
     if(write(fd, head, sizeof head) != (ssize_t)sizeof head)
     {
@@ -39,7 +38,7 @@ static int make_blob(const char* path, const char* tag)
     return fd;
 }
 
-static void print_id(const char* label, uint8_t id[DB_ID_SIZE])
+static void print_id(const char *label, uint8_t id[DB_ID_SIZE])
 {
     printf("%s: ", label);
     for(int i = 0; i < DB_ID_SIZE; i++)

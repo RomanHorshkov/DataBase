@@ -1,6 +1,6 @@
 /**
  * @file fsutil.c
- * @brief 
+ * @brief
  *
  * @author  Roman Horshkov <roman.horshkov@gmail.com>
  * @date    2025
@@ -9,16 +9,16 @@
 
 #include "fsutil.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <libgen.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <dirent.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 /****************************************************************************
  * PRIVATE DEFINES
@@ -43,24 +43,22 @@
  ****************************************************************************
  */
 
-static int mkdir_one(const char* path, mode_t mode);
+static int mkdir_one(const char *path, mode_t mode);
 
-static int fsync_parent_dir(const char* path);
+static int fsync_parent_dir(const char *path);
 
 /****************************************************************************
  * PUBLIC FUNCTIONS DEFINITIONS
  ****************************************************************************
  */
 
-int mkdir_p(const char* path, mode_t mode)
+int mkdir_p(const char *path, mode_t mode)
 {
-    if(!path || !*path)
-        return -1;
-    char* tmp = strdup(path);
-    if(!tmp)
-        return -1;
+    if(!path || !*path) return -1;
+    char *tmp = strdup(path);
+    if(!tmp) return -1;
 
-    for(char* p = tmp + 1; *p; ++p)
+    for(char *p = tmp + 1; *p; ++p)
     {
         if(*p == '/')
         {
@@ -82,28 +80,25 @@ int mkdir_p(const char* path, mode_t mode)
     return 0;
 }
 
-int path_sha256(char* out, size_t out_sz, const char* root,
-                const char* sha_hex64)
+int path_sha256(char *out, size_t out_sz, const char *root,
+                const char *sha_hex64)
 {
-    if(!out || !root || !sha_hex64 || strlen(sha_hex64) != 64)
-        return -1;
+    if(!out || !root || !sha_hex64 || strlen(sha_hex64) != 64) return -1;
     snprintf(out, out_sz, "%s/objects/sha256/%.2s/%.2s/%s", root, sha_hex64,
              sha_hex64 + 2, sha_hex64);
     return 0;
 }
 
-int write_object_atomic_from_fd(const char* dst_path, int src_fd)
+int write_object_atomic_from_fd(const char *dst_path, int src_fd)
 {
     struct stat st;
-    if(stat(dst_path, &st) == 0)
-        return 0;  // already exists
+    if(stat(dst_path, &st) == 0) return 0;  // already exists
 
     // ensure parent exists
     {
-        char* dup = strdup(dst_path);
-        if(!dup)
-            return -1;
-        char* dir = dirname(dup);
+        char *dup = strdup(dst_path);
+        if(!dup) return -1;
+        char *dir = dirname(dup);
         if(mkdir_p(dir, 0770) != 0 && errno != EEXIST)
         {
             free(dup);
@@ -115,8 +110,7 @@ int write_object_atomic_from_fd(const char* dst_path, int src_fd)
     char tmp[4096];
     snprintf(tmp, sizeof tmp, "%s.tmp.%d", dst_path, (int)getpid());
     int wfd = open(tmp, O_CREAT | O_WRONLY | O_TRUNC, 0640);
-    if(wfd < 0)
-        return -1;
+    if(wfd < 0) return -1;
 
     u_int8_t buf[1 << 16];
     ssize_t  rd;
@@ -150,18 +144,16 @@ int write_object_atomic_from_fd(const char* dst_path, int src_fd)
     return 0;
 }
 
-int ensure_symlink(const char* link_path, const char* target)
+int ensure_symlink(const char *link_path, const char *target)
 {
     struct stat st;
-    if(lstat(link_path, &st) == 0)
-        return 0;
+    if(lstat(link_path, &st) == 0) return 0;
 
     // ensure parent exists
     {
-        char* dup = strdup(link_path);
-        if(!dup)
-            return -1;
-        char* dir = dirname(dup);
+        char *dup = strdup(link_path);
+        if(!dup) return -1;
+        char *dir = dirname(dup);
         if(mkdir_p(dir, 0770) != 0 && errno != EEXIST)
         {
             free(dup);
@@ -170,8 +162,7 @@ int ensure_symlink(const char* link_path, const char* target)
         free(dup);
     }
 
-    if(symlink(target, link_path) != 0 && errno != EEXIST)
-        return -1;
+    if(symlink(target, link_path) != 0 && errno != EEXIST) return -1;
     return 0;
 }
 
@@ -180,25 +171,22 @@ int ensure_symlink(const char* link_path, const char* target)
  ****************************************************************************
  */
 
-static int mkdir_one(const char* path, mode_t mode)
+static int mkdir_one(const char *path, mode_t mode)
 {
-    if(mkdir(path, mode) == 0)
-        return 0;
+    if(mkdir(path, mode) == 0) return 0;
     if(errno == EEXIST)
     {
         struct stat st;
-        if(stat(path, &st) == 0 && S_ISDIR(st.st_mode))
-            return 0;
+        if(stat(path, &st) == 0 && S_ISDIR(st.st_mode)) return 0;
     }
     return -1;
 }
 
-static int fsync_parent_dir(const char* path)
+static int fsync_parent_dir(const char *path)
 {
-    char* dup = strdup(path);
-    if(!dup)
-        return -1;
-    char* dir = dirname(dup);
+    char *dup = strdup(path);
+    if(!dup) return -1;
+    char *dir = dirname(dup);
     int   dfd = open(dir, O_RDONLY
 #ifdef O_DIRECTORY
                             | O_DIRECTORY

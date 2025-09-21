@@ -13,6 +13,9 @@
         "fsutil.h": "c",
         "rand.h": "c",
         "db_int.h": "c",
-        "dirent.h": "c"
+        "dirent.h": "c",
+        "auth_service.h": "c",
+        "db_interface.h": "c",
+        "lmdb.h": "c"
     }
 }
