@@ -1,1 +1,10 @@
+#Ignore gitignore file
+.gitignore
+# Ignore clang-format file
+.clang-format
+#ignore vs code files
 .vscode/
+#ignore any test file
+.test*
+#ignore any build file
+/build

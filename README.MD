@@ -1,224 +1,144 @@
-![CI](https://github.com/RomanHorshkov/DataBase/actions/workflows/ci.yml/badge.svg)
-
 # LMDB Presence Store
 
-Content-addressed blob store with **presence-only ACLs** built on top of [LMDB](https://symas.com/lmdb/).
-Implements users, roles, metadata, and access control with predictable performance and a clean embedded design in C.
+A compact, embedded datastore for content‑addressed blobs with presence‑only access control lists (ACLs). It stores users, roles, object metadata, and forward/reverse ACL indexes on top of LMDB, providing predictable performance and simple operational characteristics.
 
----
+## What It Does
 
-## ✨ Features
+* **Embedded key–value database**
+  Links directly against LMDB; no daemon, no network round‑trips.
 
-* **Embedded database**: no separate server; links directly against `liblmdb`.
-* **Content-addressed storage**: deduplicates blobs by SHA-256 hash.
-* **Presence-only ACL**: lightweight model — access is just *present or not present* in an ACL index.
-* **Forward + reverse indexes**:
+* **Content‑addressed storage (SHA‑256)**
+  Blobs are deduplicated by digest and kept under a deterministic filesystem path.
 
-  * Forward: “principal has type T on resource”
-  * Reverse: “all principals of type T on resource” (fast cascades).
-* **User management**: random 128-bit IDs, email lookup, roles (Viewer/Publisher).
-* **Cascade delete**: owner deletion removes data, metadata, and all ACL entries.
-* **Test suite included**: custom runner with `--list`, `--filter`, `--repeat`, etc.
+* **Presence‑only ACL model**
+  Authorization is expressed by presence/absence of a relation in compact indexes. Supported relations:
 
----
+  * `O` Owner
+  * `S` Share (may re‑share)
+  * `U` User (viewer)
 
-## 📂 Project Layout
+* **Users and roles**
+  Users have stable 128‑bit IDs and a role:
 
-```
-include/
-  cryptography/sha256.h    # hashing API
-  db_store.h               # DB public API
-  fsutil.h                 # filesystem helpers
-  uuid.h                   # ID helpers
+  * `Viewer` — can view data shared with them (and be granted `U`/`S`)
+  * `Publisher` — may upload and manage owned data in addition to viewing
+  * `None` — registered, no default privileges
 
-src/
-  cryptography/sha256.c    # OpenSSL-based SHA-256 + object ingest
-  db_store.c               # LMDB-backed DB implementation
-  fsutil.c                 # mkdir -p, atomic writes, path helpers
-  uuid.c                   # random ID128 utilities
-  main.c                   # demo entry point
-  tests/tests.c            # custom test runner
+* **Deterministic metadata**
+  Each object has a compact metadata record: version, SHA‑256, MIME type, size, creation time, and owner ID.
 
-Makefile
-README.md
-```
+* **Atomic ingest and delete**
+  Uploads stream to a temporary file, fsync, publish atomically, then index in a single transaction. Deletes cascade through ACLs, metadata, and the blob.
 
----
+* **Fast lookups**
 
-## 🗄️ Database Model
+  * Email → user ID
+  * User ID → user record
+  * Data ID → metadata
+  * ACL presence (`O`/`S`/`U`) via forward or reverse indexes
 
-All state lives under a **root directory**:
+* **Batch‑friendly**
+  Supports batch user insertion and efficient set membership checks using cursor merge‑walks.
+
+## Architecture Overview
 
 ```
 <root>/
- ├── meta/                  # LMDB environment (sub-databases)
- └── objects/sha256/        # Content-addressed blob store
-      └── xx/yy/<sha256…>   # Two-level sharding by SHA-256 prefix
+ ├── meta/                      # LMDB environment (multiple sub‑databases)
+ └── objects/sha256/xx/yy/<sha> # Blob store sharded by digest prefix
 ```
 
-### LMDB Sub-databases
+### LMDB Sub‑databases
 
-| Name            | Key              | Value         | Purpose                              |                                                   |                                             |
-| --------------- | ---------------- | ------------- | ------------------------------------ | ------------------------------------------------- | ------------------------------------------- |
-| `user`          | `id[16]`         | `UserPacked`  | User records (id, email, role)       |                                                   |                                             |
-| `user_email2id` | `email` (bytes)  | `id[16]`      | Lookup user ID by email              |                                                   |                                             |
-| `data_meta`     | `data_id[16]`    | `DataMeta`    | Metadata for each stored object      |                                                   |                                             |
-| `sha2data`      | `sha[32]`        | `data_id[16]` | Deduplication map (hash → object id) |                                                   |                                             |
-| `acl_fwd`       | \`principal\[16] | rtype(1)      | data\[16]\`                          | `uint8_t` sentinel                                | Forward ACL: “does P have relation R on D?” |
-| `acl_by_res`    | \`data\[16]      | rtype(1)\`    | `principal[16]`                      | Reverse ACL: “who has relation R on D?” (dupsort) |                                             |
+* `user` — key: `user_id(16)` → value: packed user record (version, role, email)
+* `user_email2id` — key: email bytes → value: `user_id(16)`
+* `data_meta` — key: `data_id(16)` → value: packed metadata
+* `sha2data` — key: `sha256(32)` → value: `data_id(16)` (deduplication)
+* `acl_fwd` — key: `principal(16) | rtype(1) | resource(16)` → value: sentinel
+* `acl_by_res` — key: `resource(16) | rtype(1)` → value: `principal(16)` (dupsort)
 
----
+Keys are chosen for lexicographic friendliness with UUIDv7, enabling efficient `MDB_APPEND` inserts and high page utilization.
 
-### Metadata Records
+## Capabilities
 
-#### `UserPacked`
+* Create/open/close environment with bounded map size and on‑disk layout bootstrap.
+* Add users with validation and canonicalization of emails; idempotent by email.
+* Lookup users by ID or email; list all, or list by role.
+* Upload data (publishers only), with content deduplication and automatic owner ACL grant.
+* Resolve filesystem paths from data IDs to on‑disk objects.
+* Share data by granting presence in `U` (and optionally `S`) with forward and reverse indexes updated atomically.
+* Delete data (owners only), removing ACL entries, metadata, sha‑index, and the blob.
 
-```c
-typedef struct __attribute__((packed)) {
-    uint8_t    id[16];             // 128-bit random user ID
-    char       email[EMAIL_MAX_LEN]; // zero-terminated email
-    uint16_t   role;               // USER_ROLE_NONE / VIEWER / PUBLISHER
-} UserPacked;
-```
+## Error Semantics
 
-#### `DataMeta`
+Public APIs return negative errno values:
 
-```c
-typedef struct __attribute__((packed)) {
-    uint8_t   ver;                 // schema version
-    uint8_t   sha[32];             // SHA-256 digest
-    char      mime[32];            // MIME type (e.g. application/dicom)
-    uint64_t  size;                // size in bytes
-    uint64_t  created_at;          // epoch seconds
-    uint8_t   owner[16];           // uploader's user ID
-} DataMeta;
-```
+* `-EINVAL` — invalid input
+* `-ENOENT` — missing user/data or absent ACL presence
+* `-EPERM` — insufficient privileges
+* `-EEXIST` — deduplication hit (already present)
+* `-EIO` — storage/database error
+* `-ENOMEM` — out of map space (or allocation failure)
 
----
+LMDB statuses are consistently mapped to errno‑style codes.
 
-## 🔑 Access Control (Presence-only ACL)
+## Performance Characteristics
 
-* **Relation types (`rtype`)**
+* O(1) lookups by key (email→id, id→record).
+* Near‑sequential inserts for UUIDv7 keys (`MDB_APPEND`) minimize page splits.
+* Single‑pass ingest (stream → temp → fsync → publish) limits copies.
+* Presence checks are direct key probes; reverse scans use dup‑sorted ranges.
 
-  * `O` → Owner (full control, can delete)
-  * `S` → Share (can reshare)
-  * `U` → User (view only)
+Actual throughput and footprint depend on page size, email length distribution, and environment options. The design targets microsecond‑level lookups and small per‑record overhead.
 
-* **Forward index (`acl_fwd`)**
-  Key = `principal | rtype | resource` → Value = sentinel
+## Build and Test
 
-  > “Does principal P have relation R on data D?”
+### Prerequisites
 
-* **Reverse index (`acl_by_res`)**
-  Key = `resource | rtype` → Value = principals (dupsort)
+* `liblmdb-dev`
+* `libssl-dev` (for SHA‑256 and streaming ingest)
+* `build-essential`, `pkg-config`
 
-  > “Who are all principals with relation R on data D?”
-
-* **Presence semantics**
-
-  ```
-  has_any(P, D) = P has any of {O, S, U} on D
-  ```
-
-  Grants and revokes always update both indexes in the same transaction.
-
----
-
-## 👥 User Roles
-
-* **Viewer**: can view (`U`) and reshare (`S`) data shared with them.
-* **Publisher**: viewer rights + can upload new data + delete own data.
-* **None**: registered but no rights.
-
----
-
-## 🚀 Build & Run
-
-### Install dependencies
+### Build
 
 ```bash
-sudo apt-get install -y build-essential liblmdb-dev libssl-dev pkg-config
+make                # builds demo: build/bin/db_lmdb_demo
+make build/bin/db_tests
 ```
 
-### Build binaries
+### Run Tests
 
 ```bash
-make                        # demo → build/bin/db_lmdb_demo
-make build/bin/db_tests     # test runner
+make test
+make test RUNARGS="--list"        # list tests
+make test RUNARGS="--filter upload"
 ```
 
-### Run demo
+## Configuration
 
-```bash
-./build/bin/db_lmdb_demo
-```
+* **Root directory**: passed to `db_open`; layout is created if missing.
+* **Map size**: configured at `db_open`; expandable up to a maximum (`LMDB_MAPSIZE_MAX_MB` or default multiple).
+* **Durability**: default LMDB durability settings; tune at environment open if needed.
 
----
+## Reliability and Integrity
 
-## 🧪 Tests
+* Multi‑index updates (metadata and ACL pairs) occur in a single write transaction.
+* Ingest writes to a temporary file and atomically renames on success; the database never references a partial blob.
+* Blob removal is best‑effort after metadata/ACL deletion; the database is the source of truth.
 
-The test runner has its own CLI:
+## Limitations
 
-```
-Usage: db_tests [--list] [--filter SUBSTR] [--stop] [--repeat N] [--help]
-```
+* Single‑writer semantics from LMDB; readers are concurrent, writers are serialized by the environment.
+* ACL model is intentionally minimal (presence only). Fine‑grained policies or time‑bound grants are out of scope.
+* Metadata schema is fixed‑size and compact; extensibility relies on the `ver` field for forward‑compatible evolution.
 
-### Examples
+## Roadmap (Indicative)
 
-```bash
-make test RUNARGS="--list"            # list all test names
-make test RUNARGS="--filter upload"   # run only tests containing "upload"
-make test RUNARGS="--repeat 3 --stop" # run suite 3x, stop on first failure
-make test RUNARGS="--help"            # show usage
-```
+* Optional role‑based policy hooks on share/reshare.
+* Audit events around grant/revoke operations.
+* Tooling for orphaned blob GC and environment compaction.
+* Optional encryption at rest for blobs and/or metadata.
 
-### Convenience shortcuts
+## License
 
-```bash
-make test-list
-make test-help
-make test-filter F=upload
-make test-repeat N=5
-```
-
----
-
-## 🛠️ Public API (Highlights)
-
-From `db_store.h`:
-
-### Users
-
-* `db_add_user(email, out_id)`
-* `db_user_find_by_id(id, out_email)`
-* `db_user_find_by_email(email, out_id)`
-* `db_user_set_role_viewer(id)`
-* `db_user_set_role_publisher(id)`
-* `db_user_list_all(ids, &count)`
-* `db_user_list_viewers(ids, &count)`
-* `db_user_list_publishers(ids, &count)`
-
-### Data
-
-* `db_upload_data_from_fd(owner_id, fd, mime, out_data_id)`
-* `db_resolve_data_path(data_id, out_path, out_sz)`
-* `db_owner_delete_data(owner_id, data_id)`
-
-### Sharing
-
-* `db_user_share_data_with_user_email(owner_id, data_id, target_email)`
-
----
-
-## ⚡ Notes
-
-* LMDB environments live under `<root>/meta/`.
-* Blob objects are written to `<root>/objects/sha256/` using two-level sharding.
-* Deduplication is automatic: uploading identical content returns `-EEXIST` and grants owner presence.
-* Deletes cascade: all ACL entries, metadata, and the blob are removed.
-
----
-
-## 📜 License
-
-MIT (or your choice).
+Specify license terms here.

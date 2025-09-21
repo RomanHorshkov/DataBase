@@ -5,6 +5,14 @@
         "stdio.h": "c",
         "stdint.h": "c",
         "uuid.h": "c",
-        "string.h": "c"
+        "string.h": "c",
+        "fcntl.h": "c",
+        "random.h": "c",
+        "cerrno": "c",
+        "sha256.h": "c",
+        "fsutil.h": "c",
+        "rand.h": "c",
+        "db_int.h": "c",
+        "dirent.h": "c"
     }
 }

@@ -42,9 +42,9 @@ jobs:
           echo "## Results" >> $GITHUB_STEP_SUMMARY
           if grep -qE "All [0-9]+ test\(s\) passed" test.log; then
             passed=$(grep -oE "All [0-9]+ test\(s\) passed" test.log | tail -n1)
-            echo "✅ $passed" >> $GITHUB_STEP_SUMMARY
+            echo "$passed" >> $GITHUB_STEP_SUMMARY
           else
-            echo "❌ Some tests failed" >> $GITHUB_STEP_SUMMARY
+            echo "Some tests failed" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### Tail of log" >> $GITHUB_STEP_SUMMARY
             tail -n 30 test.log >> $GITHUB_STEP_SUMMARY

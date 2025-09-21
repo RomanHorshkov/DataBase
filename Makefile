@@ -40,28 +40,38 @@ TEST_SRC  := $(TEST_DIR)/src
 
 BIN_DIR   := build/bin
 
+# --- Library build ---
+OBJ_DIR := build/obj
+LIB_DIR := build/lib
+LIB_STATIC := $(LIB_DIR)/libdb.a
+
 # --- Includes ---
 INCLUDES := -I$(APP_INC) -I$(APP_INC)/cryptography -I$(TEST_INC)
 
 # --- App sources (demo binary) ---
-SRCS := \
-    $(APP_SRC)/main.c \
+CORE_SRCS := \
+    $(APP_SRC)/db_env.c \
+    $(APP_SRC)/db_users.c \
+    $(APP_SRC)/db_data.c \
+    $(APP_SRC)/db_acl.c \
     $(APP_SRC)/fsutil.c \
-    $(APP_SRC)/db_store.c \
     $(APP_SRC)/uuid.c \
     $(APP_SRC)/cryptography/sha256.c
 
+SRCS := \
+    $(APP_SRC)/main.c \
+    $(CORE_SRCS)
+
 # --- Tests sources (test binary) ---
-# Link tests against the app objects (minus main.c)
 SRCS_TEST := \
     $(TEST_SRC)/test_main.c \
     $(TEST_SRC)/test_func.c \
     $(TEST_SRC)/test_load.c \
     $(TEST_SRC)/test_utils.c \
-    $(APP_SRC)/fsutil.c \
-    $(APP_SRC)/db_store.c \
-    $(APP_SRC)/uuid.c \
-    $(APP_SRC)/cryptography/sha256.c
+    $(CORE_SRCS)
+
+# --- Library core objects ---
+CORE_OBJS := $(patsubst $(APP_SRC)/%.c,$(OBJ_DIR)/%.o,$(CORE_SRCS))
 
 # --- Flags ---
 CFLAGS  += -O2 -Wall -Wextra -Wshadow -Wconversion -Werror $(INCLUDES) \
@@ -69,7 +79,7 @@ CFLAGS  += -O2 -Wall -Wextra -Wshadow -Wconversion -Werror $(INCLUDES) \
 LDFLAGS += $(OPENSSL_LIBS) $(LMDB_LIBS)
 
 # --- Targets ---
-.PHONY: all clean test
+.PHONY: all clean test lib
 all: $(BIN_DIR)/db_lmdb_demo
 
 ifeq ($(OPENSSL_FOUND)$(LMDB_FOUND),11)
@@ -105,4 +115,47 @@ test: $(BIN_DIR)/db_tests
 	./$(BIN_DIR)/db_tests $(RUNARGS)
 
 clean:
-	rm -rf build
+	@rm -rf build && rm -rf med/ && rm -f blob_* && rm -rf .test*
+
+
+# --- Library compilation ---
+lib: $(LIB_STATIC)
+
+# Compile objects under build/obj/...
+$(OBJ_DIR)/%.o: $(APP_SRC)/%.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Archive into build/lib/libdb_store.a
+$(LIB_STATIC): $(CORE_OBJS)
+	@mkdir -p $(LIB_DIR)
+	$(AR) rcs $@ $^
+	@echo "Built $@"
+
+# --- Code formatting (clang-format only) ------------------------------------
+CLANG_FORMAT := $(shell command -v clang-format 2>/dev/null)
+
+# Prefer git; fall back to find (and avoid build/.git trees)
+FMT_FILES := $(shell \
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+    git ls-files '*.c' '*.h'; \
+  else \
+    find . -type f \( -name '*.c' -o -name '*.h' \) \
+      -not -path './build/*' -not -path './.git/*'; \
+  fi )
+
+.PHONY: format
+format:
+ifndef CLANG_FORMAT
+	@echo "[fmt] clang-format not found. Install it (e.g., sudo apt-get install -y clang-format)"; exit 1
+else
+	@if [ ! -f .clang-format ]; then \
+	  echo "[fmt] No .clang-format found;"; \
+	fi
+	@if [ -z "$(FMT_FILES)" ]; then \
+	  echo "[fmt] No .c/.h files found to format."; \
+	else \
+	  echo "[fmt] Formatting $(words $(FMT_FILES)) files"; \
+	  printf "%s\0" $(FMT_FILES) | xargs -0 -r $(CLANG_FORMAT) -i; \
+	fi
+endif
