@@ -1,7 +1,7 @@
 #ifndef DB_ACL_H
 #define DB_ACL_H
 
-#include "db_int.h"
+#include "db_intern.h"
 #include <stdint.h>
 
 #ifdef __cplusplus

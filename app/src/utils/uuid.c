@@ -15,8 +15,8 @@
 /* try getrandom first (non-blocking semantics with urandom pool after init)*/
 #    include <sys/random.h>
 #endif
+#include "db_intern.h"
 
-#include "db_int.h"
 
 /****************************************************************************
  * PRIVATE DEFINES

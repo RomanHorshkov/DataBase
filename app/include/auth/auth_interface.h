@@ -9,7 +9,8 @@
 #ifndef AUTH_SERVICE_H
 #define AUTH_SERVICE_H
 
-#include "db_interface.h" /* DB_ID_SIZE, DB_EMAIL_MAX_LEN */
+#include <stdint.h> /* uint8_t */
+#include "db_interface.h" /* DB_ID_SIZE */
 
 #ifdef __cplusplus
 extern "C"

@@ -7,29 +7,13 @@
  * (c) 2025
  */
 
-#include <sodium.h>
-#include "sha256.h"       /* your SHA-256 for token hashing */
-#include "db_int.h"       /* DB, DB->db_* */
-#include "db_interface.h" /* db_user_find_by_email, db_add_user, ... */
-#include "auth_service.h"
+#include"auth_intern.h"
+// #include <sodium.h>
+// #include "sha256.h"       /* your SHA-256 for token hashing */
+// #include "db_intern.h"       /* DB, DB->db_* */
+// #include "db_interface.h" /* db_user_find_by_email, db_add_user, ... */
+// #include "auth_service.h"
 
-/* Records */
-typedef struct __attribute__((packed))
-{
-    /* record version */
-    uint8_t ver;
-
-    /* libsodium hash string (NUL-terminated) */
-    char pwhash[crypto_pwhash_STRBYTES];
-} UserPwdHash;
-
-typedef struct __attribute__((packed))
-{
-    uint8_t  ver;                 /* record version */
-    uint8_t  user_id[DB_ID_SIZE]; /* user id */
-    uint64_t created_at;          /* epoch secs */
-    uint64_t expires_at;          /* epoch secs */
-} SessionRec;
 
 #define AUTH_VER         1
 #define SESSION_TTL_SECS (7ull * 24ull * 3600ull) /* 7 days */

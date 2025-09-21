@@ -1,5 +1,5 @@
 /**
- * @file sha256.h
+ * @file sha256.c
  * @brief
  *
  * @author  Roman Horshkov <roman.horshkov@gmail.com>

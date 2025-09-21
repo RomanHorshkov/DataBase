@@ -8,10 +8,9 @@
  */
 
 #include "db_acl.h"
-#include "db_int.h"
-#include "fsutil.h"
+#include "db_intern.h"
 #include "sha256.h"
-#include "uuid.h"
+#include "utils.h"
 
 /****************************************************************************
  * PRIVATE DEFINES

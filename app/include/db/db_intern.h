@@ -1,5 +1,5 @@
 /**
- * @file db_int.h
+ * @file db_intern.h
  * @brief
  *
  * @author  Roman Horshkov <roman.horshkov@gmail.com>

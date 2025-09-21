@@ -8,7 +8,7 @@
  */
 
 #include "db_acl.h"
-#include "db_int.h"
+#include "db_intern.h"
 
 _Static_assert(DB_ID_SIZE == 16, "ACL code assumes 16-byte IDs");
 

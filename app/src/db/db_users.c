@@ -8,8 +8,8 @@
  */
 
 #include "db_acl.h"
-#include "db_int.h"
-#include "uuid.h"
+#include "db_intern.h"
+#include "utils.h"
 
 #include "ctype.h"
 
