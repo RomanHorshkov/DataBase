@@ -35,9 +35,7 @@
  ****************************************************************************
  */
 
-static int      db_user_get_role(const uint8_t id[DB_ID_SIZE],
-                                 user_role_t  *out_role);
-static uint64_t now_secs(void);
+static int db_user_get_role(uint8_t id[DB_ID_SIZE], user_role_t *out_role);
 
 static inline void write_data_meta(void *dst, const Sha256 *digest,
                                    const char *mime, uint64_t size,
@@ -217,8 +215,7 @@ retry_chunk:
     return 0;
 }
 
-int db_data_delete(const uint8_t owner[DB_ID_SIZE],
-                   const uint8_t data_id[DB_ID_SIZE])
+int db_data_delete(uint8_t owner[DB_ID_SIZE], uint8_t data_id[DB_ID_SIZE])
 {
     if(!owner || !data_id) return -EINVAL;
 
@@ -294,7 +291,7 @@ int db_data_delete(const uint8_t owner[DB_ID_SIZE],
  ****************************************************************************
  */
 
-static int db_user_get_role(const uint8_t id[DB_ID_SIZE], user_role_t *out_role)
+static int db_user_get_role(uint8_t id[DB_ID_SIZE], user_role_t *out_role)
 {
     if(!id || !out_role) return -EINVAL;
 
@@ -321,9 +318,4 @@ static int db_user_get_role(const uint8_t id[DB_ID_SIZE], user_role_t *out_role)
     *out_role = (user_role_t)role;
     mdb_txn_abort(txn);
     return 0;
-}
-
-static uint64_t now_secs(void)
-{
-    return (uint64_t)time(NULL);
 }

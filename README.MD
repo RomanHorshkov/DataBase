@@ -40,14 +40,6 @@ A compact, embedded datastore for content‑addressed blobs with presence‑only
 * **Batch‑friendly**
   Supports batch user insertion and efficient set membership checks using cursor merge‑walks.
 
-## Architecture Overview
-
-```
-<root>/
- ├── meta/                      # LMDB environment (multiple sub‑databases)
- └── objects/sha256/xx/yy/<sha> # Blob store sharded by digest prefix
-```
-
 ### LMDB Sub‑databases
 
 * `user` — key: `user_id(16)` → value: packed user record (version, role, email)

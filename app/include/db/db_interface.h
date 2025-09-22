@@ -16,6 +16,13 @@ extern "C"
 #endif
 
 /****************************************************************************
+ * PUBLIC INCLUDES
+ ****************************************************************************
+ */
+#include <stddef.h> /* size_t */
+#include <stdint.h> /* uint_* */
+
+/****************************************************************************
  * PUBLIC DEFINES
  ****************************************************************************
  */
@@ -88,8 +95,8 @@ int db_add_users(size_t n_users, char email_flat[n_users * DB_EMAIL_MAX_LEN]);
  * @param out_email Output email.
  * @return 0 on success, -ENOENT if not found, -EIO on DB error.
  */
-int db_user_find_by_id(const uint8_t id[DB_ID_SIZE],
-                       char          out_email[DB_EMAIL_MAX_LEN]);
+int db_user_find_by_id(uint8_t id[DB_ID_SIZE],
+                       char    out_email[DB_EMAIL_MAX_LEN]);
 
 /**
  * @brief Look up a users by ids.
@@ -97,8 +104,7 @@ int db_user_find_by_id(const uint8_t id[DB_ID_SIZE],
  * @param ids_flat flat array of ids.
  * @return 0 on success, -ENOENT if not found, -EIO on DB error.
  */
-int db_user_find_by_ids(size_t        n_users,
-                        const uint8_t ids_flat[n_users * DB_ID_SIZE]);
+int db_user_find_by_ids(size_t n_users, uint8_t ids_flat[n_users * DB_ID_SIZE]);
 
 /**
  * @brief Look up a user id by email.
@@ -106,8 +112,8 @@ int db_user_find_by_ids(size_t        n_users,
  * @param out_id Output user ID.
  * @return 0 on success, -ENOENT if not found, -EIO on DB error.
  */
-int db_user_find_by_email(const char email[DB_EMAIL_MAX_LEN],
-                          uint8_t    out_id[DB_ID_SIZE]);
+int db_user_find_by_email(char    email[DB_EMAIL_MAX_LEN],
+                          uint8_t out_id[DB_ID_SIZE]);
 
 /**
  * @brief Share data with a user identified by email (grants 'U' presence).
@@ -117,9 +123,9 @@ int db_user_find_by_email(const char email[DB_EMAIL_MAX_LEN],
  * @return 0 on success, -ENOENT if user or data missing, -EIO on DB error,
  * -EPERM on ACL.
  */
-int db_user_share_data_with_user_email(const uint8_t owner[DB_ID_SIZE],
-                                       const uint8_t data_id[DB_ID_SIZE],
-                                       const char    email[DB_EMAIL_MAX_LEN]);
+int db_user_share_data_with_user_email(uint8_t owner[DB_ID_SIZE],
+                                       uint8_t data_id[DB_ID_SIZE],
+                                       char    email[DB_EMAIL_MAX_LEN]);
 
 /**
  * @brief Update a user's role in the DB to viewer.
@@ -182,8 +188,7 @@ int db_data_get_path(uint8_t img_id[DB_ID_SIZE], char *out_path,
  * @return 0 on success, -EPERM if actor not owner, -ENOENT if missing, -EIO
  * otherwise.
  */
-int db_data_delete(const uint8_t actor[DB_ID_SIZE],
-                   const uint8_t data_id[DB_ID_SIZE]);
+int db_data_delete(uint8_t actor[DB_ID_SIZE], uint8_t data_id[DB_ID_SIZE]);
 
 /**
  * @brief Ingest a blob from 'src_fd', computing SHA-256 while streaming it.

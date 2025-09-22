@@ -7,13 +7,12 @@
  * (c) 2025
  */
 
-#include"auth_intern.h"
-// #include <sodium.h>
+#include <sodium.h>
+#include "auth_intern.h"
 // #include "sha256.h"       /* your SHA-256 for token hashing */
 // #include "db_intern.h"       /* DB, DB->db_* */
 // #include "db_interface.h" /* db_user_find_by_email, db_add_user, ... */
 // #include "auth_service.h"
-
 
 #define AUTH_VER         1
 #define SESSION_TTL_SECS (7ull * 24ull * 3600ull) /* 7 days */
@@ -21,6 +20,30 @@
 /* Optional pepper for session token hashing (hex string in env). */
 static unsigned char G_PEPPER[32];
 static int           G_HAVE_PEPPER = 0;
+
+/****************************************************************************
+ * PRIVATE FUNCTIONS PROTOTYPES
+ ****************************************************************************
+ */
+static int hash_password_store(char        out[crypto_pwhash_STRBYTES],
+                               const char* pw);
+
+static int verify_password(const char* stored, const char* pw);
+
+static void token_hash(const unsigned char raw[AUTH_SESSION_TOKEN_RAW_LEN],
+                       unsigned char       out32[32]);
+
+static int token_b64_from_raw(
+    const unsigned char raw[AUTH_SESSION_TOKEN_RAW_LEN],
+    char                out[AUTH_SESSION_TOKEN_B64_LEN]);
+
+static int token_raw_from_b64(
+    const char* b64, unsigned char out_raw[AUTH_SESSION_TOKEN_RAW_LEN]);
+
+/****************************************************************************
+ * PUBLIC FUNCTIONS DEFINITIONS
+ ****************************************************************************
+ */
 
 int auth_crypto_init(void)
 {
@@ -38,74 +61,6 @@ int auth_crypto_init(void)
     }
     return 0;
 }
-
-static inline uint64_t now_secs(void)
-{
-    return (uint64_t)time(NULL);
-}
-
-/* ---- password hashing helpers (Argon2id via libsodium) ---- */
-
-static int hash_password_store(char out[crypto_pwhash_STRBYTES], const char* pw)
-{
-    if(!pw) return -EINVAL;
-    if(crypto_pwhash_str(out, pw, strlen(pw),
-                         crypto_pwhash_OPSLIMIT_INTERACTIVE,
-                         crypto_pwhash_MEMLIMIT_INTERACTIVE) != 0)
-    {
-        return -EIO;
-    }
-    return 0;
-}
-
-static int verify_password(const char* stored, const char* pw)
-{
-    if(!stored || !pw) return -EINVAL;
-    int rc = crypto_pwhash_str_verify(stored, pw, strlen(pw));
-    if(rc == 0) return 0;
-    if(rc == -1) return -EPERM; /* wrong password */
-    return -EIO;
-}
-
-/* ---- token helpers ---- */
-
-static void token_hash(const unsigned char raw[AUTH_SESSION_TOKEN_RAW_LEN],
-                       unsigned char       out32[32])
-{
-    /* H = SHA256( [pepper?] || raw ) */
-    Sha256Ctx ctx;
-    crypt_sha256_init(&ctx);
-    if(G_HAVE_PEPPER) crypt_sha256_update(&ctx, G_PEPPER, 32);
-    crypt_sha256_update(&ctx, raw, AUTH_SESSION_TOKEN_RAW_LEN);
-    crypt_sha256_final(&ctx, out32);
-}
-
-static int token_b64_from_raw(
-    const unsigned char raw[AUTH_SESSION_TOKEN_RAW_LEN],
-    char                out[AUTH_SESSION_TOKEN_B64_LEN])
-{
-    /* base64url, no padding */
-    size_t out_len = sodium_base64_ENCODED_LEN(
-        AUTH_SESSION_TOKEN_RAW_LEN, sodium_base64_VARIANT_URLSAFE_NO_PADDING);
-    if(out_len >= AUTH_SESSION_TOKEN_B64_LEN) return -EINVAL;
-    sodium_bin2base64(out, out_len, raw, AUTH_SESSION_TOKEN_RAW_LEN,
-                      sodium_base64_VARIANT_URLSAFE_NO_PADDING);
-    return 0;
-}
-
-static int token_raw_from_b64(const char*   b64,
-                              unsigned char out_raw[AUTH_SESSION_TOKEN_RAW_LEN])
-{
-    if(!b64) return -EINVAL;
-    size_t bin_len = 0;
-    if(sodium_base642bin(out_raw, AUTH_SESSION_TOKEN_RAW_LEN, b64, strlen(b64),
-                         NULL, &bin_len, NULL,
-                         sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0)
-        return -EINVAL;
-    return (bin_len == AUTH_SESSION_TOKEN_RAW_LEN) ? 0 : -EINVAL;
-}
-
-/* ---- public API ---- */
 
 int auth_register_local(const char* email, const char* password,
                         uint8_t out_user_id[DB_ID_SIZE])
@@ -259,4 +214,68 @@ int auth_logout(const char* session_token_b64)
     (void)mdb_del(txn, DB->db_session, &k, NULL);
     if(mdb_txn_commit(txn) != MDB_SUCCESS) return -EIO;
     return 0;
+}
+
+/****************************************************************************
+ * PRIVATE FUNCTIONS DEFINITIONS
+ ****************************************************************************
+ */
+
+static int hash_password_store(char out[crypto_pwhash_STRBYTES], const char* pw)
+{
+    if(!pw) return -EINVAL;
+    if(crypto_pwhash_str(out, pw, strlen(pw),
+                         crypto_pwhash_OPSLIMIT_INTERACTIVE,
+                         crypto_pwhash_MEMLIMIT_INTERACTIVE) != 0)
+    {
+        return -EIO;
+    }
+    return 0;
+}
+
+static int verify_password(const char* stored, const char* pw)
+{
+    if(!stored || !pw) return -EINVAL;
+    int rc = crypto_pwhash_str_verify(stored, pw, strlen(pw));
+    if(rc == 0) return 0;
+    if(rc == -1) return -EPERM; /* wrong password */
+    return -EIO;
+}
+
+/* ---- token helpers ---- */
+
+static void token_hash(const unsigned char raw[AUTH_SESSION_TOKEN_RAW_LEN],
+                       unsigned char       out32[32])
+{
+    /* H = SHA256( [pepper?] || raw ) */
+    Sha256Ctx ctx;
+    crypt_sha256_init(&ctx);
+    if(G_HAVE_PEPPER) crypt_sha256_update(&ctx, G_PEPPER, 32);
+    crypt_sha256_update(&ctx, raw, AUTH_SESSION_TOKEN_RAW_LEN);
+    crypt_sha256_final(&ctx, out32);
+}
+
+static int token_b64_from_raw(
+    const unsigned char raw[AUTH_SESSION_TOKEN_RAW_LEN],
+    char                out[AUTH_SESSION_TOKEN_B64_LEN])
+{
+    /* base64url, no padding */
+    size_t out_len = sodium_base64_ENCODED_LEN(
+        AUTH_SESSION_TOKEN_RAW_LEN, sodium_base64_VARIANT_URLSAFE_NO_PADDING);
+    if(out_len >= AUTH_SESSION_TOKEN_B64_LEN) return -EINVAL;
+    sodium_bin2base64(out, out_len, raw, AUTH_SESSION_TOKEN_RAW_LEN,
+                      sodium_base64_VARIANT_URLSAFE_NO_PADDING);
+    return 0;
+}
+
+static int token_raw_from_b64(const char*   b64,
+                              unsigned char out_raw[AUTH_SESSION_TOKEN_RAW_LEN])
+{
+    if(!b64) return -EINVAL;
+    size_t bin_len = 0;
+    if(sodium_base642bin(out_raw, AUTH_SESSION_TOKEN_RAW_LEN, b64, strlen(b64),
+                         NULL, &bin_len, NULL,
+                         sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0)
+        return -EINVAL;
+    return (bin_len == AUTH_SESSION_TOKEN_RAW_LEN) ? 0 : -EINVAL;
 }

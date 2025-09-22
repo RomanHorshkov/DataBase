@@ -12,8 +12,8 @@
 
 #include <errno.h>
 #include <lmdb.h>
-#include <stddef.h>
-#include <stdint.h>
+// #include <stddef.h> // in interface
+// #include <stdint.h> // in interface
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,23 +46,29 @@ extern "C"
 
 struct DB
 {
-    char     root[1024]; /* Root directory */
-    MDB_env *env;        /* LMDB environment */
+    /* Root directory */
+    char root[1024];
 
-    /* data DBIs */
-    MDB_dbi db_user_id2data; /* User DBI */
-    MDB_dbi db_user_mail2id; /* Email -> ID DBI */
-    MDB_dbi db_data_id2meta; /* Data meta DBI */
-    MDB_dbi db_data_sha2id;  /* SHA -> data_id DBI */
+    /* LMDB environment */
+    MDB_env *env;
 
-    MDB_dbi
-        db_acl_fwd; /* key=principal(16)|rtype(1)|data(16), val=uint8_t(1) */
-    MDB_dbi db_acl_rel; /* key=data(16)|rtype(1), val=principal(16) (dupsort,
-                         dupfixed) */
+    /* User DBIs */
+    MDB_dbi db_user_id2data;
+    MDB_dbi db_user_mail2id;
+    MDB_dbi db_user_pwd;
 
-    /* auth DBIs */
-    MDB_dbi db_user_pwd; /* user_id -> UserPwdHash */
-    MDB_dbi db_session;  /* sha256(token) -> SessionRec */
+    /* Data DBIs */
+    MDB_dbi db_data_id2meta;
+    MDB_dbi db_data_sha2id;
+
+    /* ACL DBIs */
+    MDB_dbi db_acl_fwd;
+    MDB_dbi db_acl_rel;
+
+    /* Session DBIs */
+    MDB_dbi db_session_access;
+    MDB_dbi db_session_refresh;
+    MDB_dbi db_session_revoked;
 
     /* Stats and health */
     size_t map_size_bytes;

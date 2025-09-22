@@ -1,11 +1,11 @@
 // test_main.c
-#include "db_interface.h"
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "db_interface.h"
 
 #define CHECK(x)                              \
     do                                        \

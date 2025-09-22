@@ -38,45 +38,45 @@ _Static_assert(DB_ID_SIZE == 16, "ACL code assumes 16-byte IDs");
  ****************************************************************************
  */
 
-static void acl_fwd_key(uint8_t out[33], const uint8_t principal[DB_ID_SIZE],
-                        char rel, const uint8_t resource[DB_ID_SIZE]);
+static void acl_fwd_key(uint8_t out[33], uint8_t principal[DB_ID_SIZE],
+                        char rel, uint8_t resource[DB_ID_SIZE]);
 
 /* resource(16) | rel(1) => 17 bytes (dupset key for principals) */
-static void acl_rev_key(uint8_t out[17], const uint8_t resource[DB_ID_SIZE],
+static void acl_rev_key(uint8_t out[17], uint8_t resource[DB_ID_SIZE],
                         char rel);
 
-static inline void fwd_key(uint8_t out[33], const uint8_t principal[DB_ID_SIZE],
-                           uint8_t rel, const uint8_t resource[DB_ID_SIZE])
+static inline void fwd_key(uint8_t out[33], uint8_t principal[DB_ID_SIZE],
+                           uint8_t rel, uint8_t resource[DB_ID_SIZE])
 {
     acl_fwd_key(out, principal, (char)rel, resource);
 }
 
-static inline void rev_key(uint8_t out[17], const uint8_t resource[DB_ID_SIZE],
+static inline void rev_key(uint8_t out[17], uint8_t resource[DB_ID_SIZE],
                            uint8_t rel)
 {
     acl_rev_key(out, resource, (char)rel);
 }
 
-static int put_forward(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                       uint8_t rel, const uint8_t resource[DB_ID_SIZE]);
+static int put_forward(MDB_txn *txn, uint8_t principal[DB_ID_SIZE], uint8_t rel,
+                       uint8_t resource[DB_ID_SIZE]);
 
-static int put_reverse(MDB_txn *txn, const uint8_t resource[DB_ID_SIZE],
-                       uint8_t rel, const uint8_t principal[DB_ID_SIZE]);
+static int put_reverse(MDB_txn *txn, uint8_t resource[DB_ID_SIZE], uint8_t rel,
+                       uint8_t principal[DB_ID_SIZE]);
 
-static void del_forward(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                        uint8_t rel, const uint8_t resource[DB_ID_SIZE]);
+static void del_forward(MDB_txn *txn, uint8_t principal[DB_ID_SIZE],
+                        uint8_t rel, uint8_t resource[DB_ID_SIZE]);
 
-static void del_reverse(MDB_txn *txn, const uint8_t resource[DB_ID_SIZE],
-                        uint8_t rel, const uint8_t principal[DB_ID_SIZE]);
+static void del_reverse(MDB_txn *txn, uint8_t resource[DB_ID_SIZE], uint8_t rel,
+                        uint8_t principal[DB_ID_SIZE]);
 
-static int has_forward(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                       uint8_t rel, const uint8_t resource[DB_ID_SIZE]);
+static int has_forward(MDB_txn *txn, uint8_t principal[DB_ID_SIZE], uint8_t rel,
+                       uint8_t resource[DB_ID_SIZE]);
 
 /* --------------------------- Public grant/revoke ---------------------------
  */
 
-int acl_grant_owner(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                    const uint8_t resource[DB_ID_SIZE])
+int acl_grant_owner(MDB_txn *txn, uint8_t principal[DB_ID_SIZE],
+                    uint8_t resource[DB_ID_SIZE])
 {
     if(!txn || !principal || !resource) return -EINVAL;
     /* Write both sides; both idempotent. */
@@ -85,8 +85,8 @@ int acl_grant_owner(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
     return put_reverse(txn, resource, ACL_RTYPE_OWNER, principal);
 }
 
-int acl_grant_share(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                    const uint8_t resource[DB_ID_SIZE])
+int acl_grant_share(MDB_txn *txn, uint8_t principal[DB_ID_SIZE],
+                    uint8_t resource[DB_ID_SIZE])
 {
     if(!txn || !principal || !resource) return -EINVAL;
     /* Also reflect in forward so we can list by user quickly. */
@@ -95,8 +95,8 @@ int acl_grant_share(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
     return put_reverse(txn, resource, ACL_RTYPE_SHARE, principal);
 }
 
-int acl_grant_view(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                   const uint8_t resource[DB_ID_SIZE])
+int acl_grant_view(MDB_txn *txn, uint8_t principal[DB_ID_SIZE],
+                   uint8_t resource[DB_ID_SIZE])
 {
     if(!txn || !principal || !resource) return -EINVAL;
     int rc = put_forward(txn, principal, ACL_RTYPE_VIEW, resource);
@@ -104,8 +104,8 @@ int acl_grant_view(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
     return put_reverse(txn, resource, ACL_RTYPE_VIEW, principal);
 }
 
-int acl_revoke_owner(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                     const uint8_t resource[DB_ID_SIZE])
+int acl_revoke_owner(MDB_txn *txn, uint8_t principal[DB_ID_SIZE],
+                     uint8_t resource[DB_ID_SIZE])
 {
     if(!txn || !principal || !resource) return -EINVAL;
     del_forward(txn, principal, ACL_RTYPE_OWNER, resource);
@@ -113,8 +113,8 @@ int acl_revoke_owner(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
     return 0;
 }
 
-int acl_revoke_share(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                     const uint8_t resource[DB_ID_SIZE])
+int acl_revoke_share(MDB_txn *txn, uint8_t principal[DB_ID_SIZE],
+                     uint8_t resource[DB_ID_SIZE])
 {
     if(!txn || !principal || !resource) return -EINVAL;
     del_forward(txn, principal, ACL_RTYPE_SHARE, resource);
@@ -122,8 +122,8 @@ int acl_revoke_share(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
     return 0;
 }
 
-int acl_revoke_view(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                    const uint8_t resource[DB_ID_SIZE])
+int acl_revoke_view(MDB_txn *txn, uint8_t principal[DB_ID_SIZE],
+                    uint8_t resource[DB_ID_SIZE])
 {
     if(!txn || !principal || !resource) return -EINVAL;
     del_forward(txn, principal, ACL_RTYPE_VIEW, resource);
@@ -133,29 +133,29 @@ int acl_revoke_view(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
 
 /* ----------------------------- Presence checks ---------------------------- */
 
-int acl_has_owner(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                  const uint8_t resource[DB_ID_SIZE])
+int acl_has_owner(MDB_txn *txn, uint8_t principal[DB_ID_SIZE],
+                  uint8_t resource[DB_ID_SIZE])
 {
     if(!txn || !principal || !resource) return -EINVAL;
     return has_forward(txn, principal, ACL_RTYPE_OWNER, resource);
 }
 
-int acl_has_share(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                  const uint8_t resource[DB_ID_SIZE])
+int acl_has_share(MDB_txn *txn, uint8_t principal[DB_ID_SIZE],
+                  uint8_t resource[DB_ID_SIZE])
 {
     if(!txn || !principal || !resource) return -EINVAL;
     return has_forward(txn, principal, ACL_RTYPE_SHARE, resource);
 }
 
-int acl_has_view(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                 const uint8_t resource[DB_ID_SIZE])
+int acl_has_view(MDB_txn *txn, uint8_t principal[DB_ID_SIZE],
+                 uint8_t resource[DB_ID_SIZE])
 {
     if(!txn || !principal || !resource) return -EINVAL;
     return has_forward(txn, principal, ACL_RTYPE_VIEW, resource);
 }
 
-int acl_has_any(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                const uint8_t resource[DB_ID_SIZE])
+int acl_has_any(MDB_txn *txn, uint8_t principal[DB_ID_SIZE],
+                uint8_t resource[DB_ID_SIZE])
 {
     if(!txn || !principal || !resource) return -EINVAL;
     int rc = has_forward(txn, principal, ACL_RTYPE_OWNER, resource);
@@ -176,13 +176,13 @@ int acl_has_any(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
  * Return 0 to continue, non-zero to stop early.
  * `rel` is one of ACL_RTYPE_OWNER/ACL_RTYPE_SHARE/ACL_RTYPE_VIEW (exposed only
  * here as a tag). */
-typedef int (*acl_iter_cb)(const uint8_t resource[DB_ID_SIZE], uint8_t rel,
+typedef int (*acl_iter_cb)(uint8_t resource[DB_ID_SIZE], uint8_t rel,
                            void *user);
 
 /* Iterate all resources accessible by `principal`.
  * If you need to filter (owner/share/view), add three booleans and skip others.
  */
-int acl_list_data_for_user(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
+int acl_list_data_for_user(MDB_txn *txn, uint8_t principal[DB_ID_SIZE],
                            acl_iter_cb cb, void *user)
 {
     if(!txn || !principal || !cb) return -EINVAL;
@@ -206,8 +206,8 @@ int acl_list_data_for_user(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
         uint8_t *key = (uint8_t *)k.mv_data;
         if(memcmp(key, principal, DB_ID_SIZE) != 0) break;
 
-        uint8_t        rel      = key[16];
-        const uint8_t *resource = key + 17;
+        uint8_t  rel      = key[16];
+        uint8_t *resource = key + 17;
 
         int cr = cb(resource, rel, user);
         if(cr)
@@ -224,7 +224,7 @@ int acl_list_data_for_user(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
     return (rc == MDB_SUCCESS) ? 0 : -EIO;
 }
 
-int acl_data_destroy(MDB_txn *txn, const uint8_t resource[DB_ID_SIZE])
+int acl_data_destroy(MDB_txn *txn, uint8_t resource[DB_ID_SIZE])
 {
     if(!txn || !resource) return -EINVAL;
 
@@ -258,7 +258,7 @@ int acl_data_destroy(MDB_txn *txn, const uint8_t resource[DB_ID_SIZE])
             {
                 /* delete forward: principal|rel|resource -> 1 */
                 uint8_t fkey[33];
-                acl_fwd_key(fkey, (const uint8_t *)v.mv_data, rel, resource);
+                acl_fwd_key(fkey, (uint8_t *)v.mv_data, rel, resource);
                 MDB_val fk = {.mv_size = sizeof fkey, .mv_data = fkey};
                 (void)mdb_del(txn, DB->db_acl_fwd, &fk, NULL);
 
@@ -287,8 +287,8 @@ int acl_data_destroy(MDB_txn *txn, const uint8_t resource[DB_ID_SIZE])
  ****************************************************************************
  */
 
-static void acl_fwd_key(uint8_t out[33], const uint8_t principal[DB_ID_SIZE],
-                        char rel, const uint8_t resource[DB_ID_SIZE])
+static void acl_fwd_key(uint8_t out[33], uint8_t principal[DB_ID_SIZE],
+                        char rel, uint8_t resource[DB_ID_SIZE])
 {
     memcpy(out, principal, DB_ID_SIZE);
     out[16] = (uint8_t)rel;
@@ -296,15 +296,14 @@ static void acl_fwd_key(uint8_t out[33], const uint8_t principal[DB_ID_SIZE],
 }
 
 /* resource(16) | rel(1) => 17 bytes (dupset key for principals) */
-static void acl_rev_key(uint8_t out[17], const uint8_t resource[DB_ID_SIZE],
-                        char rel)
+static void acl_rev_key(uint8_t out[17], uint8_t resource[DB_ID_SIZE], char rel)
 {
     memcpy(out, resource, DB_ID_SIZE);
     out[16] = (uint8_t)rel;
 }
 
-static int put_forward(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                       uint8_t rel, const uint8_t resource[DB_ID_SIZE])
+static int put_forward(MDB_txn *txn, uint8_t principal[DB_ID_SIZE], uint8_t rel,
+                       uint8_t resource[DB_ID_SIZE])
 {
     uint8_t k[33];
     fwd_key(k, principal, rel, resource);
@@ -316,8 +315,8 @@ static int put_forward(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
     return 0;
 }
 
-static int put_reverse(MDB_txn *txn, const uint8_t resource[DB_ID_SIZE],
-                       uint8_t rel, const uint8_t principal[DB_ID_SIZE])
+static int put_reverse(MDB_txn *txn, uint8_t resource[DB_ID_SIZE], uint8_t rel,
+                       uint8_t principal[DB_ID_SIZE])
 {
     uint8_t k[17];
     rev_key(k, resource, rel);
@@ -328,8 +327,8 @@ static int put_reverse(MDB_txn *txn, const uint8_t resource[DB_ID_SIZE],
     return 0;
 }
 
-static void del_forward(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                        uint8_t rel, const uint8_t resource[DB_ID_SIZE])
+static void del_forward(MDB_txn *txn, uint8_t principal[DB_ID_SIZE],
+                        uint8_t rel, uint8_t resource[DB_ID_SIZE])
 {
     uint8_t k[33];
     fwd_key(k, principal, rel, resource);
@@ -337,8 +336,8 @@ static void del_forward(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
     (void)mdb_del(txn, DB->db_acl_fwd, &fk, NULL);
 }
 
-static void del_reverse(MDB_txn *txn, const uint8_t resource[DB_ID_SIZE],
-                        uint8_t rel, const uint8_t principal[DB_ID_SIZE])
+static void del_reverse(MDB_txn *txn, uint8_t resource[DB_ID_SIZE], uint8_t rel,
+                        uint8_t principal[DB_ID_SIZE])
 {
     uint8_t k[17];
     rev_key(k, resource, rel);
@@ -347,8 +346,8 @@ static void del_reverse(MDB_txn *txn, const uint8_t resource[DB_ID_SIZE],
     (void)mdb_del(txn, DB->db_acl_rel, &rk, &rv);
 }
 
-static int has_forward(MDB_txn *txn, const uint8_t principal[DB_ID_SIZE],
-                       uint8_t rel, const uint8_t resource[DB_ID_SIZE])
+static int has_forward(MDB_txn *txn, uint8_t principal[DB_ID_SIZE], uint8_t rel,
+                       uint8_t resource[DB_ID_SIZE])
 {
     uint8_t k[33];
     fwd_key(k, principal, rel, resource);

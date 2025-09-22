@@ -9,7 +9,7 @@
 #ifndef AUTH_SERVICE_H
 #define AUTH_SERVICE_H
 
-#include <stdint.h> /* uint8_t */
+#include <stdint.h>       /* uint8_t */
 #include "db_interface.h" /* DB_ID_SIZE */
 
 #ifdef __cplusplus

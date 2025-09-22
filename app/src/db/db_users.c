@@ -95,197 +95,6 @@ static inline int is_domain_allowed(unsigned char c)
  ****************************************************************************
  */
 
-/** Look up a user by id and optionally return email. */
-int db_user_find_by_id(const uint8_t id[DB_ID_SIZE], char out[DB_EMAIL_MAX_LEN])
-{
-    MDB_txn *txn;
-    if(mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn) != MDB_SUCCESS)
-        return -EIO;
-
-    MDB_val k   = {.mv_size = DB_ID_SIZE, .mv_data = (void *)id};
-    MDB_val v   = {0};
-    int     mrc = mdb_get(txn, DB->db_user_id2data, &k, &v);
-    if(mrc != MDB_SUCCESS)
-    {
-        mdb_txn_abort(txn);
-        return db_map_mdb_err(mrc);
-    }
-    if(k.mv_size != DB_ID_SIZE)
-    {
-        mdb_txn_abort(txn);
-        return -EIO;
-    }
-    if(out)
-    {
-        if(db_user_get_and_check_mem(&v, NULL, NULL, NULL, out, NULL) != 0)
-        {
-            mdb_txn_abort(txn);
-            return -EIO;
-        }
-    }
-
-    mdb_txn_abort(txn);
-    return 0;
-}
-
-int db_user_find_by_ids(size_t        n_users,
-                        const uint8_t ids_flat[n_users * DB_ID_SIZE])
-{
-    if(n_users == 0 || !ids_flat) return -EINVAL;
-
-    MDB_txn *txn = NULL;
-    int      mrc = mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn);
-    if(mrc != MDB_SUCCESS) return db_map_mdb_err(mrc);
-
-    /* Try fast path: sort local copy */
-    uint8_t *ids_sorted = (uint8_t *)malloc(n_users * DB_ID_SIZE);
-    if(ids_sorted)
-    {
-        memcpy(ids_sorted, ids_flat, n_users * DB_ID_SIZE);
-        qsort(ids_sorted, n_users, DB_ID_SIZE, cmp_id16);
-
-        /* de-dup in place */
-        size_t uniq = 0;
-        for(size_t i = 0; i < n_users; ++i)
-        {
-            if(uniq == 0 ||
-               memcmp(ids_sorted + (uniq - 1) * DB_ID_SIZE,
-                      ids_sorted + i * DB_ID_SIZE, DB_ID_SIZE) != 0)
-            {
-                if(uniq != i)
-                    memcpy(ids_sorted + uniq * DB_ID_SIZE,
-                           ids_sorted + i * DB_ID_SIZE, DB_ID_SIZE);
-                ++uniq;
-            }
-        }
-
-        MDB_cursor *cur = NULL;
-        if(mdb_cursor_open(txn, DB->db_user_id2data, &cur) != MDB_SUCCESS)
-        {
-            free(ids_sorted);
-            mdb_txn_abort(txn);
-            return -EIO;
-        }
-
-        MDB_val k = {0}, v = {0};
-        int     rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST);
-        if(rc == MDB_NOTFOUND)
-        {
-            mdb_cursor_close(cur);
-            free(ids_sorted);
-            mdb_txn_abort(txn);
-            return db_map_mdb_err(rc);
-        }
-        if(rc != MDB_SUCCESS)
-        {
-            mdb_cursor_close(cur);
-            free(ids_sorted);
-            mdb_txn_abort(txn);
-            return db_map_mdb_err(rc);
-        }
-
-        for(size_t i = 0; i < uniq; ++i)
-        {
-            const uint8_t *want = ids_sorted + i * DB_ID_SIZE;
-
-            /* advance until current key >= want */
-            for(;;)
-            {
-                int cmp = (k.mv_size == DB_ID_SIZE)
-                              ? memcmp(k.mv_data, want, DB_ID_SIZE)
-                              : (k.mv_size < DB_ID_SIZE ? -1 : 1);
-                if(cmp >= 0) break;
-
-                rc = mdb_cursor_get(cur, &k, &v, MDB_NEXT);
-                if(rc != MDB_SUCCESS)
-                {
-                    mdb_cursor_close(cur);
-                    free(ids_sorted);
-                    mdb_txn_abort(txn);
-                    return db_map_mdb_err(rc);
-                }
-            }
-
-            if(k.mv_size != DB_ID_SIZE ||
-               memcmp(k.mv_data, want, DB_ID_SIZE) != 0)
-            {
-                mdb_cursor_close(cur);
-                free(ids_sorted);
-                mdb_txn_abort(txn);
-                return db_map_mdb_err(MDB_NOTFOUND);
-            }
-
-            /* prefetch for next iteration (optional) */
-            if(i + 1 < uniq)
-            {
-                rc = mdb_cursor_get(cur, &k, &v, MDB_NEXT);
-                if(rc != MDB_SUCCESS && rc != MDB_NOTFOUND)
-                {
-                    mdb_cursor_close(cur);
-                    free(ids_sorted);
-                    mdb_txn_abort(txn);
-                    return -EIO;
-                }
-            }
-        }
-
-        mdb_cursor_close(cur);
-        free(ids_sorted);
-        mdb_txn_abort(txn); /* read-only: abort, don’t commit */
-        return 0;
-    }
-
-    /* Fallback: individual lookups */
-    for(size_t i = 0; i < n_users; ++i)
-    {
-        const uint8_t *id = &ids_flat[i * DB_ID_SIZE];
-        MDB_val        k  = {.mv_size = DB_ID_SIZE, .mv_data = (void *)id};
-        MDB_val        v  = {0};
-        mrc               = mdb_get(txn, DB->db_user_id2data, &k, &v);
-        if(mrc != MDB_SUCCESS)
-        {
-            mdb_txn_abort(txn);
-            return db_map_mdb_err(mrc);
-        }
-        if(k.mv_size != DB_ID_SIZE)
-        {
-            mdb_txn_abort(txn);
-            return -EIO;
-        }
-    }
-    mdb_txn_abort(txn); /* read-only: abort */
-    return 0;
-}
-
-/** Look up a user id by email. */
-int db_user_find_by_email(const char email[DB_EMAIL_MAX_LEN],
-                          uint8_t    out_id[DB_ID_SIZE])
-{
-    if(!email || email[0] == '\0') return -EINVAL;
-
-    MDB_txn *txn;
-    if(mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn) != MDB_SUCCESS)
-        return -EIO;
-
-    MDB_val k   = {.mv_size = strlen(email), .mv_data = (void *)email};
-    MDB_val v   = {0};
-    int     mrc = mdb_get(txn, DB->db_user_mail2id, &k, &v);
-    if(mrc != MDB_SUCCESS)
-    {
-        mdb_txn_abort(txn);
-        return db_map_mdb_err(mrc);
-    }
-    if(v.mv_size != DB_ID_SIZE)
-    {
-        mdb_txn_abort(txn);
-        return -EIO;
-    }
-
-    if(out_id) memcpy(out_id, v.mv_data, DB_ID_SIZE);
-    mdb_txn_abort(txn);
-    return 0;
-}
-
 int db_add_user(char email[DB_EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
 {
     if(!email ||
@@ -475,6 +284,186 @@ retry_chunk:
     return 0;
 }
 
+/** Look up a user by id and optionally return email. */
+int db_user_find_by_id(uint8_t id[DB_ID_SIZE], char out[DB_EMAIL_MAX_LEN])
+{
+    MDB_txn *txn;
+    if(mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn) != MDB_SUCCESS)
+        return -EIO;
+
+    MDB_val k   = {.mv_size = DB_ID_SIZE, .mv_data = (void *)id};
+    MDB_val v   = {0};
+    int     mrc = mdb_get(txn, DB->db_user_id2data, &k, &v);
+    if(mrc != MDB_SUCCESS)
+    {
+        mdb_txn_abort(txn);
+        return db_map_mdb_err(mrc);
+    }
+    if(out)
+    {
+        if(db_user_get_and_check_mem(&v, NULL, NULL, NULL, out, NULL) != 0)
+        {
+            mdb_txn_abort(txn);
+            return -EIO;
+        }
+    }
+
+    mdb_txn_abort(txn);
+    return 0;
+}
+
+int db_user_find_by_ids(size_t n_users, uint8_t ids_flat[n_users * DB_ID_SIZE])
+{
+    if(n_users == 0 || !ids_flat) return -EINVAL;
+
+    MDB_txn *txn = NULL;
+    int      mrc = mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn);
+    if(mrc != MDB_SUCCESS) return db_map_mdb_err(mrc);
+
+    /* Try fast path: sort local copy */
+    uint8_t *ids_sorted = (uint8_t *)malloc(n_users * DB_ID_SIZE);
+    if(ids_sorted)
+    {
+        memcpy(ids_sorted, ids_flat, n_users * DB_ID_SIZE);
+        qsort(ids_sorted, n_users, DB_ID_SIZE, cmp_id16);
+
+        /* de-dup in place */
+        size_t uniq = 0;
+        for(size_t i = 0; i < n_users; ++i)
+        {
+            if(uniq == 0 ||
+               memcmp(ids_sorted + (uniq - 1) * DB_ID_SIZE,
+                      ids_sorted + i * DB_ID_SIZE, DB_ID_SIZE) != 0)
+            {
+                if(uniq != i)
+                    memcpy(ids_sorted + uniq * DB_ID_SIZE,
+                           ids_sorted + i * DB_ID_SIZE, DB_ID_SIZE);
+                ++uniq;
+            }
+        }
+
+        MDB_cursor *cur = NULL;
+        if(mdb_cursor_open(txn, DB->db_user_id2data, &cur) != MDB_SUCCESS)
+        {
+            free(ids_sorted);
+            mdb_txn_abort(txn);
+            return -EIO;
+        }
+
+        MDB_val k = {0}, v = {0};
+        int     rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST);
+        if(rc == MDB_NOTFOUND)
+        {
+            mdb_cursor_close(cur);
+            free(ids_sorted);
+            mdb_txn_abort(txn);
+            return db_map_mdb_err(rc);
+        }
+        if(rc != MDB_SUCCESS)
+        {
+            mdb_cursor_close(cur);
+            free(ids_sorted);
+            mdb_txn_abort(txn);
+            return db_map_mdb_err(rc);
+        }
+
+        for(size_t i = 0; i < uniq; ++i)
+        {
+            const uint8_t *want = ids_sorted + i * DB_ID_SIZE;
+
+            /* advance until current key >= want */
+            for(;;)
+            {
+                int cmp = (k.mv_size == DB_ID_SIZE)
+                              ? memcmp(k.mv_data, want, DB_ID_SIZE)
+                              : (k.mv_size < DB_ID_SIZE ? -1 : 1);
+                if(cmp >= 0) break;
+
+                rc = mdb_cursor_get(cur, &k, &v, MDB_NEXT);
+                if(rc != MDB_SUCCESS)
+                {
+                    mdb_cursor_close(cur);
+                    free(ids_sorted);
+                    mdb_txn_abort(txn);
+                    return db_map_mdb_err(rc);
+                }
+            }
+
+            if(k.mv_size != DB_ID_SIZE ||
+               memcmp(k.mv_data, want, DB_ID_SIZE) != 0)
+            {
+                mdb_cursor_close(cur);
+                free(ids_sorted);
+                mdb_txn_abort(txn);
+                return db_map_mdb_err(MDB_NOTFOUND);
+            }
+
+            /* prefetch for next iteration (optional) */
+            if(i + 1 < uniq)
+            {
+                rc = mdb_cursor_get(cur, &k, &v, MDB_NEXT);
+                if(rc != MDB_SUCCESS && rc != MDB_NOTFOUND)
+                {
+                    mdb_cursor_close(cur);
+                    free(ids_sorted);
+                    mdb_txn_abort(txn);
+                    return -EIO;
+                }
+            }
+        }
+
+        mdb_cursor_close(cur);
+        free(ids_sorted);
+        mdb_txn_abort(txn); /* read-only: abort, don’t commit */
+        return 0;
+    }
+
+    /* Fallback: individual lookups */
+    for(size_t i = 0; i < n_users; ++i)
+    {
+        // mrc = db_user_find_by_id(&ids_flat[i * DB_ID_SIZE], NULL);
+        uint8_t *id = &ids_flat[i * DB_ID_SIZE];
+        MDB_val  k  = {.mv_size = DB_ID_SIZE, .mv_data = (void *)id};
+        MDB_val  v  = {0};
+        mrc         = mdb_get(txn, DB->db_user_id2data, &k, &v);
+        if(mrc != MDB_SUCCESS)
+        {
+            mdb_txn_abort(txn);
+            return db_map_mdb_err(mrc);
+        }
+    }
+    mdb_txn_abort(txn); /* read-only: abort */
+    return 0;
+}
+
+int db_user_find_by_email(char    email[DB_EMAIL_MAX_LEN],
+                          uint8_t out_id[DB_ID_SIZE])
+{
+    if(!email || email[0] == '\0') return -EINVAL;
+
+    MDB_txn *txn;
+    if(mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn) != MDB_SUCCESS)
+        return -EIO;
+
+    MDB_val k   = {.mv_size = strlen(email), .mv_data = (void *)email};
+    MDB_val v   = {0};
+    int     mrc = mdb_get(txn, DB->db_user_mail2id, &k, &v);
+    if(mrc != MDB_SUCCESS)
+    {
+        mdb_txn_abort(txn);
+        return db_map_mdb_err(mrc);
+    }
+    if(v.mv_size != DB_ID_SIZE)
+    {
+        mdb_txn_abort(txn);
+        return -EIO;
+    }
+
+    if(out_id) memcpy(out_id, v.mv_data, DB_ID_SIZE);
+    mdb_txn_abort(txn);
+    return 0;
+}
+
 int db_user_list_all(uint8_t *out_ids, size_t *inout_count_max)
 {
     if(!inout_count_max || !out_ids) return -EINVAL;
@@ -579,9 +568,9 @@ int db_user_list_viewers(uint8_t *out_ids, size_t *inout_count_max)
     return 0;
 }
 
-int db_user_share_data_with_user_email(const uint8_t owner[DB_ID_SIZE],
-                                       const uint8_t data_id[DB_ID_SIZE],
-                                       const char    email[DB_EMAIL_MAX_LEN])
+int db_user_share_data_with_user_email(uint8_t owner[DB_ID_SIZE],
+                                       uint8_t data_id[DB_ID_SIZE],
+                                       char    email[DB_EMAIL_MAX_LEN])
 {
     if(!owner || !data_id || !email || email[0] == '\0') return -EINVAL;
 

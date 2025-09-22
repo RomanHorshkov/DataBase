@@ -15,20 +15,30 @@
  ****************************************************************************
  */
 
-/* Logical names of LMDB sub-databases */
-#define DB_USER_ID2DATA "user_id2data" /* key = id(16),  val = UserPacked */
-#define DB_USER_MAIL2ID "user_mail2id" /* key = email,   val = id(16) */
-#define DB_DATA_ID2META "data_id2meta" /* key = id(16),  val = DataMeta */
-#define DB_DATA_SHA2ID  "data_sha2id"  /* key = sha(32), val = id(16) */
-#define DB_USER_ID2PWD  "user_id2pwd"  /* key=user_id(16), val=UserPwdHash */
-#define DB_SESSION      "session" /* key=sha256(token)(32), val=SessionRec */
+/**
+ * LMDB sub-DBIs
+*/
+/* User DBIs */
+#define DB_USER_ID2DATA "user_id2data" /* id(16) - UserPacked */
+#define DB_USER_MAIL2ID "user_mail2id" /* email - id(16) */
+#define DB_USER_ID2PWD  "user_id2pwd"  /* id(16) - UserPwdHash */
 
-/* Presence-only ACL DBs */
+/* Data DBIs */
+#define DB_DATA_ID2META "data_id2meta" /* id(16) - DataMeta */
+#define DB_DATA_SHA2ID  "data_sha2id"  /* sha(32) - id(16) */
+
+/* ACL DBIs */
 #define DB_ACL_FWD \
-    "acl_fwd" /* key = principal(16)|rtype(1)|data(16), val = uint8_t sentinel   \
-             */
-#define DB_ACL_REL \
-    "acl_rel" /* key=data(16)|rtype(1),            val = principal(16) */
+    "acl_fwd" /* principal(16)|rtype(1)|data(16), uint8_t sentinel */
+#define DB_ACL_REL "acl_rel" /* data(16)|rtype(1), principal(16) */
+
+/* Session DBIs */
+#define DB_SESSION_ACCESS \
+    "session_access" /* key=sha256(token)(32) -> AccessRec */
+#define DB_SESSION_REFRESH \
+    "session_refresh" /* key=sha256(token)(32) -> RefreshRec */
+#define DB_SESSION_REVOKED \
+    "session_revoked" /* key=user_id(16) -> uint64 since */
 
 /****************************************************************************
  * PRIVATE STUCTURED VARIABLES
@@ -95,12 +105,18 @@ int db_open(const char *root_dir, size_t mapsize_bytes)
     MDB_txn *txn = NULL;
     if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS) goto fail_env;
 
+    /* User DBIs */
     if(mdb_dbi_open(txn, DB_USER_ID2DATA, MDB_CREATE, &DB->db_user_id2data) !=
        MDB_SUCCESS)
         goto fail;
     if(mdb_dbi_open(txn, DB_USER_MAIL2ID, MDB_CREATE, &DB->db_user_mail2id) !=
        MDB_SUCCESS)
         goto fail;
+    if(mdb_dbi_open(txn, DB_USER_ID2PWD, MDB_CREATE, &DB->db_user_pwd) !=
+       MDB_SUCCESS)
+        goto fail;
+
+    /* Data DBIs */
     if(mdb_dbi_open(txn, DB_DATA_ID2META, MDB_CREATE, &DB->db_data_id2meta) !=
        MDB_SUCCESS)
         goto fail;
@@ -108,7 +124,7 @@ int db_open(const char *root_dir, size_t mapsize_bytes)
        MDB_SUCCESS)
         goto fail;
 
-    /* ACLs: forward (presence sentinel) + relations (dupsort, dupfixed) */
+    /* ACL DBIs */
     if(mdb_dbi_open(txn, DB_ACL_FWD, MDB_CREATE, &DB->db_acl_fwd) !=
        MDB_SUCCESS)
         goto fail;
@@ -116,12 +132,15 @@ int db_open(const char *root_dir, size_t mapsize_bytes)
                     &DB->db_acl_rel) != MDB_SUCCESS)
         goto fail;
 
-    /* Authentication DBIs */
-    if(mdb_dbi_open(txn, DB_USER_ID2PWD, MDB_CREATE, &DB->db_user_pwd) !=
-       MDB_SUCCESS)
+    /* Session DBIs */
+    if(mdb_dbi_open(txn, DB_SESSION_ACCESS, MDB_CREATE,
+                    &DB->db_session_access) != MDB_SUCCESS)
         goto fail;
-    if(mdb_dbi_open(txn, DB_SESSION, MDB_CREATE, &DB->db_session) !=
-       MDB_SUCCESS)
+    if(mdb_dbi_open(txn, DB_SESSION_REFRESH, MDB_CREATE,
+                    &DB->db_session_refresh) != MDB_SUCCESS)
+        goto fail;
+    if(mdb_dbi_open(txn, DB_SESSION_REVOKED, MDB_CREATE,
+                    &DB->db_session_revoked) != MDB_SUCCESS)
         goto fail;
     if(mdb_txn_commit(txn) != MDB_SUCCESS)
     {

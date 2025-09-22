@@ -16,6 +16,8 @@
         "dirent.h": "c",
         "auth_service.h": "c",
         "db_interface.h": "c",
-        "lmdb.h": "c"
+        "lmdb.h": "c",
+        "ctype.h": "c",
+        "errno.h": "c"
     }
 }
