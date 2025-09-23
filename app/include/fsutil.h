@@ -1,7 +1,7 @@
 #ifndef FSUTIL_H
 #define FSUTIL_H
-#include <sys/stat.h>
 #include <stddef.h>
+#include <sys/stat.h>
 
 int mkdir_p(const char* path, mode_t mode);
 int path_sha256(char* out, size_t out_sz, const char* root,

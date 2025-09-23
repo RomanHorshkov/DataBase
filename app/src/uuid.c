@@ -8,8 +8,8 @@
  */
 
 #include "uuid.h"
-#include <stdatomic.h>
 #include <fcntl.h>
+#include <stdatomic.h>
 #include <unistd.h>
 #if defined(__linux__)
 /* try getrandom first (non-blocking semantics with urandom pool after init)*/
@@ -51,8 +51,7 @@ static int             fill_random(void* p, size_t n);
  */
 int uuid_v4(uint8_t out[UUID_BYTES_SIZE])
 {
-    if(fill_random(out, 16) != 0)
-        return -1;
+    if(fill_random(out, 16) != 0) return -1;
     out[6] = (out[6] & 0x0F) | 0x40;  // version 4
     out[8] = (out[8] & 0x3F) | 0x80;  // variant RFC 4122 (10xx xxxx)
     return 0;
@@ -107,8 +106,7 @@ restart:
 
     /* Random 62 bits for the tail (rb) */
     uint8_t rb[8];
-    if(fill_random(rb, sizeof rb) != 0)
-        return -1;
+    if(fill_random(rb, sizeof rb) != 0) return -1;
 
     /* Layout per UUIDv7 (RFC 4122bis):
        - 48-bit timestamp (big-endian)
@@ -139,8 +137,7 @@ restart:
     out[14] = rb[6];
     out[15] = rb[7];
 
-    if(memcmp(last_id, out, DB_ID_SIZE) == 0)
-        goto restart;
+    if(memcmp(last_id, out, DB_ID_SIZE) == 0) goto restart;
 
     return 0;
 }
@@ -172,8 +169,7 @@ static int fill_random(void* p, size_t n)
 {
 #if defined(__linux__)
     ssize_t r = getrandom(p, n, 0);
-    if(r == (ssize_t)n)
-        return 0;
+    if(r == (ssize_t)n) return 0;
 #endif
     int fd = open("/dev/urandom", O_RDONLY);
     if(fd >= 0)

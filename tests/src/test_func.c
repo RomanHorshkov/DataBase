@@ -1,8 +1,8 @@
 /* src/tests/test_functionality.c */
 #include <sys/stat.h>
 
-#include "test_utils.h"
 #include "db_interface.h"
+#include "test_utils.h"
 
 static int is_zero16(const uint8_t x[16])
 {
@@ -884,10 +884,8 @@ int t_list_publishers_viewers(void)
     bool foundB = false, foundC = false;
     for(size_t i = 0; i < nv; i++)
     {
-        if(memcmp(ids + i * 16, B, 16) == 0)
-            foundB = true;
-        if(memcmp(ids + i * 16, Cc, 16) == 0)
-            foundC = true;
+        if(memcmp(ids + i * 16, B, 16) == 0) foundB = true;
+        if(memcmp(ids + i * 16, Cc, 16) == 0) foundC = true;
     }
     EXPECT_TRUE(foundB && foundC);
 

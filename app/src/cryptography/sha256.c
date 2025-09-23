@@ -1,15 +1,15 @@
 #include "cryptography/sha256.h"
-#include "fsutil.h"  // mkdir_p, path_sha256
+#include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <poll.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 #include <sys/stat.h>
-#include <limits.h>
+#include <unistd.h>
+#include "fsutil.h"  // mkdir_p, path_sha256
 
 #ifndef CRYPTO_READ_BUFSZ
 #    define CRYPTO_READ_BUFSZ (1 << 16)
@@ -26,8 +26,7 @@ static int digest_fd_evp(int fd, Sha256* out, size_t* size_out);
 int crypt_store_sha256_object_from_fd(const char* root, int src_fd,
                                       Sha256* digest_out, size_t* size_out)
 {
-    if(!root)
-        return -1;
+    if(!root) return -1;
 
     char tmpdir[2048];
     if(snprintf(tmpdir, sizeof tmpdir, "%s/objects/sha256", root) >=
@@ -36,13 +35,11 @@ int crypt_store_sha256_object_from_fd(const char* root, int src_fd,
         errno = ENAMETOOLONG;
         return -1;
     }
-    if(mkdir_p(tmpdir, 0770) != 0 && errno != EEXIST)
-        return -1;
+    if(mkdir_p(tmpdir, 0770) != 0 && errno != EEXIST) return -1;
 
     char tmp_path[PATH_MAX];
     int  tmpfd = make_tmp_in_dir(tmpdir, tmp_path);
-    if(tmpfd < 0)
-        return -1;
+    if(tmpfd < 0) return -1;
 
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     if(!ctx)
@@ -93,18 +90,15 @@ int crypt_store_sha256_object_from_fd(const char* root, int src_fd,
             total += (size_t)rd;
             continue;
         }
-        if(rd == 0)
-            break;
+        if(rd == 0) break;
         if(rd < 0)
         {
-            if(errno == EINTR)
-                continue;
+            if(errno == EINTR) continue;
             if(errno == EAGAIN || errno == EWOULDBLOCK)
             {
                 struct pollfd p  = {.fd = src_fd, .events = POLLIN};
                 int           pr = poll(&p, 1, -1);
-                if(pr > 0 || (pr < 0 && errno == EINTR))
-                    continue;
+                if(pr > 0 || (pr < 0 && errno == EINTR)) continue;
             }
             EVP_MD_CTX_free(ctx);
             close(tmpfd);
@@ -132,13 +126,10 @@ int crypt_store_sha256_object_from_fd(const char* root, int src_fd,
     }
     close(tmpfd);
 
-    if(publish_or_discard(root, &d, tmp_path) != 0)
-        return -1;
+    if(publish_or_discard(root, &d, tmp_path) != 0) return -1;
 
-    if(digest_out)
-        *digest_out = d;
-    if(size_out)
-        *size_out = total;
+    if(digest_out) *digest_out = d;
+    if(size_out) *size_out = total;
     return 0;
 }
 
@@ -156,29 +147,24 @@ void crypt_sha256_hex(const Sha256* d, char out[65])
 
 int crypt_rand_bytes(void* buf, size_t n)
 {
-    if(!buf && n)
-        return -1;
+    if(!buf && n) return -1;
     return RAND_bytes((unsigned char*)buf, (int)n) == 1 ? 0 : -1;
 }
 
 int crypt_sha256_fd(int fd, Sha256* out, size_t* size_out)
 {
     off_t cur = lseek(fd, 0, SEEK_CUR);
-    if(cur != (off_t)-1)
-        (void)lseek(fd, 0, SEEK_SET);
+    if(cur != (off_t)-1) (void)lseek(fd, 0, SEEK_SET);
     int rc = digest_fd_evp(fd, out, size_out);
-    if(cur != (off_t)-1)
-        (void)lseek(fd, cur, SEEK_SET);
+    if(cur != (off_t)-1) (void)lseek(fd, cur, SEEK_SET);
     return rc;
 }
 
 int crypt_sha256_file(const char* path, Sha256* out, size_t* size_out)
 {
-    if(!path || !out)
-        return -1;
+    if(!path || !out) return -1;
     int fd = open(path, O_RDONLY);
-    if(fd < 0)
-        return -1;
+    if(fd < 0) return -1;
     int rc = digest_fd_evp(fd, out, size_out);
     close(fd);
     return rc;
@@ -188,8 +174,7 @@ int crypt_sha256_file(const char* path, Sha256* out, size_t* size_out)
 static int make_tmp_in_dir(const char* tmpdir, char out_path[PATH_MAX])
 {
     int dfd = open(tmpdir, O_DIRECTORY | O_RDONLY);
-    if(dfd < 0)
-        return -1;
+    if(dfd < 0) return -1;
 
     for(int tries = 0; tries < 128; ++tries)
     {
@@ -279,8 +264,7 @@ static int publish_or_discard(const char* root, const Sha256* d,
         return 0;
     }  // dedup
 
-    if(rename(tmp_path, final_path) == 0)
-        return 0;
+    if(rename(tmp_path, final_path) == 0) return 0;
     if(link(tmp_path, final_path) == 0)
     {
         unlink(tmp_path);
@@ -292,14 +276,11 @@ static int publish_or_discard(const char* root, const Sha256* d,
 
 static int digest_fd_evp(int fd, Sha256* out, size_t* size_out)
 {
-    if(!out)
-        return -1;
+    if(!out) return -1;
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-    if(!ctx)
-        return -1;
+    if(!ctx) return -1;
     int rc = -1;
-    if(EVP_DigestInit_ex(ctx, EVP_sha256(), NULL) != 1)
-        goto done;
+    if(EVP_DigestInit_ex(ctx, EVP_sha256(), NULL) != 1) goto done;
 
     uint8_t buf[CRYPTO_READ_BUFSZ];
     size_t  total = 0;
@@ -309,33 +290,27 @@ static int digest_fd_evp(int fd, Sha256* out, size_t* size_out)
         ssize_t rd = read(fd, buf, sizeof buf);
         if(rd > 0)
         {
-            if(EVP_DigestUpdate(ctx, buf, (size_t)rd) != 1)
-                goto done;
+            if(EVP_DigestUpdate(ctx, buf, (size_t)rd) != 1) goto done;
             total += (size_t)rd;
             continue;
         }
-        if(rd == 0)
-            break;  // EOF
+        if(rd == 0) break;  // EOF
         if(rd < 0)
         {
-            if(errno == EINTR)
-                continue;
+            if(errno == EINTR) continue;
             if(errno == EAGAIN || errno == EWOULDBLOCK)
             {
                 struct pollfd p  = {.fd = fd, .events = POLLIN};
                 int           pr = poll(&p, 1, -1);
-                if(pr > 0 || (pr < 0 && errno == EINTR))
-                    continue;
+                if(pr > 0 || (pr < 0 && errno == EINTR)) continue;
             }
             goto done;
         }
     }
 
     unsigned int outlen = 0;
-    if(EVP_DigestFinal_ex(ctx, out->b, &outlen) != 1 || outlen != 32)
-        goto done;
-    if(size_out)
-        *size_out = total;
+    if(EVP_DigestFinal_ex(ctx, out->b, &outlen) != 1 || outlen != 32) goto done;
+    if(size_out) *size_out = total;
     rc = 0;
 done:
     EVP_MD_CTX_free(ctx);

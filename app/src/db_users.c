@@ -7,9 +7,9 @@
  * (c) 2025
  */
 
+#include "db_acl.h"
 #include "db_int.h"
 #include "uuid.h"
-#include "db_acl.h"
 
 #include "ctype.h"
 
@@ -131,13 +131,11 @@ int db_user_find_by_id(const uint8_t id[DB_ID_SIZE], char out[DB_EMAIL_MAX_LEN])
 int db_user_find_by_ids(size_t        n_users,
                         const uint8_t ids_flat[n_users * DB_ID_SIZE])
 {
-    if(n_users == 0 || !ids_flat)
-        return -EINVAL;
+    if(n_users == 0 || !ids_flat) return -EINVAL;
 
     MDB_txn *txn = NULL;
     int      mrc = mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn);
-    if(mrc != MDB_SUCCESS)
-        return db_map_mdb_err(mrc);
+    if(mrc != MDB_SUCCESS) return db_map_mdb_err(mrc);
 
     /* Try fast path: sort local copy */
     uint8_t *ids_sorted = (uint8_t *)malloc(n_users * DB_ID_SIZE);
@@ -196,8 +194,7 @@ int db_user_find_by_ids(size_t        n_users,
                 int cmp = (k.mv_size == DB_ID_SIZE)
                               ? memcmp(k.mv_data, want, DB_ID_SIZE)
                               : (k.mv_size < DB_ID_SIZE ? -1 : 1);
-                if(cmp >= 0)
-                    break;
+                if(cmp >= 0) break;
 
                 rc = mdb_cursor_get(cur, &k, &v, MDB_NEXT);
                 if(rc != MDB_SUCCESS)
@@ -264,8 +261,7 @@ int db_user_find_by_ids(size_t        n_users,
 int db_user_find_by_email(const char email[DB_EMAIL_MAX_LEN],
                           uint8_t    out_id[DB_ID_SIZE])
 {
-    if(!email || email[0] == '\0')
-        return -EINVAL;
+    if(!email || email[0] == '\0') return -EINVAL;
 
     MDB_txn *txn;
     if(mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn) != MDB_SUCCESS)
@@ -285,8 +281,7 @@ int db_user_find_by_email(const char email[DB_EMAIL_MAX_LEN],
         return -EIO;
     }
 
-    if(out_id)
-        memcpy(out_id, v.mv_data, DB_ID_SIZE);
+    if(out_id) memcpy(out_id, v.mv_data, DB_ID_SIZE);
     mdb_txn_abort(txn);
     return 0;
 }
@@ -298,8 +293,7 @@ int db_add_user(char email[DB_EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE])
         return -EINVAL;
 
     uint8_t elen = 0;
-    if(sanitize_email(email, &elen) != 0)
-        return -EINVAL;
+    if(sanitize_email(email, &elen) != 0) return -EINVAL;
 
     unsigned db_email_put_flags = MDB_NOOVERWRITE | MDB_RESERVE;
     unsigned db_user_put_flags  = MDB_NOOVERWRITE | MDB_RESERVE | MDB_APPEND;
@@ -308,8 +302,7 @@ retry_chunk:
     MDB_txn *txn = NULL;
 
     int mrc = mdb_txn_begin(DB->env, NULL, 0, &txn);
-    if(mrc != MDB_SUCCESS)
-        return db_map_mdb_err(mrc);
+    if(mrc != MDB_SUCCESS) return db_map_mdb_err(mrc);
 
     /* email->id; if exists stop */
     MDB_val k_email2id = {.mv_size = elen, .mv_data = (void *)email};
@@ -320,10 +313,9 @@ retry_chunk:
     if(mrc == MDB_MAP_FULL)
     {
         mdb_txn_abort(txn);
-        int grc = db_env_mapsize_expand(); /* grow */
-        if(grc != 0)
-            return db_map_mdb_err(grc); /* stop if grow failed */
-        goto retry_chunk;               /* retry whole chunk */
+        int grc = db_env_mapsize_expand();       /* grow */
+        if(grc != 0) return db_map_mdb_err(grc); /* stop if grow failed */
+        goto retry_chunk;                        /* retry whole chunk */
     }
     if(mrc != MDB_SUCCESS)
     {
@@ -354,8 +346,7 @@ retry_chunk:
             /* grow */
             int grc = db_env_mapsize_expand();
             /* stop if grow failed */
-            if(grc != 0)
-                return db_map_mdb_err(grc);
+            if(grc != 0) return db_map_mdb_err(grc);
 
             /* retry whole chunk if grow success */
             goto retry_chunk;
@@ -380,8 +371,7 @@ retry_chunk:
     if(mrc == MDB_MAP_FULL)
     {
         int grc = db_env_mapsize_expand();
-        if(grc != 0)
-            return db_map_mdb_err(grc); /* stop if grow failed */
+        if(grc != 0) return db_map_mdb_err(grc); /* stop if grow failed */
         goto retry_chunk;
     }
     if(mrc != MDB_SUCCESS)
@@ -389,15 +379,13 @@ retry_chunk:
         /* txn is already aborted/freed on commit error */
         return db_map_mdb_err(mrc);
     }
-    if(out_id)
-        memcpy(out_id, id, DB_ID_SIZE);
+    if(out_id) memcpy(out_id, id, DB_ID_SIZE);
     return 0;
 }
 
 int db_add_users(size_t n_users, char email_flat[n_users * DB_EMAIL_MAX_LEN])
 {
-    if(!email_flat)
-        return -EINVAL;
+    if(!email_flat) return -EINVAL;
 
     const unsigned email_put_flags =
         MDB_NOOVERWRITE | MDB_RESERVE; /* not append */
@@ -407,8 +395,7 @@ int db_add_users(size_t n_users, char email_flat[n_users * DB_EMAIL_MAX_LEN])
 retry_chunk:
     MDB_txn *txn = NULL;
     int      mrc = mdb_txn_begin(DB->env, NULL, 0, &txn);
-    if(mrc != MDB_SUCCESS)
-        return db_map_mdb_err(mrc);
+    if(mrc != MDB_SUCCESS) return db_map_mdb_err(mrc);
 
     for(size_t i = 0; i < n_users; ++i)
     {
@@ -432,10 +419,9 @@ retry_chunk:
         if(mrc == MDB_MAP_FULL)
         {
             mdb_txn_abort(txn);
-            int grc = db_env_mapsize_expand(); /* grow */
-            if(grc != 0)
-                return db_map_mdb_err(grc); /* stop if grow failed */
-            goto retry_chunk;               /* retry whole chunk */
+            int grc = db_env_mapsize_expand();       /* grow */
+            if(grc != 0) return db_map_mdb_err(grc); /* stop if grow failed */
+            goto retry_chunk;                        /* retry whole chunk */
         }
         if(mrc != MDB_SUCCESS)
         {
@@ -454,10 +440,9 @@ retry_chunk:
         if(mrc == MDB_MAP_FULL)
         {
             mdb_txn_abort(txn);
-            int grc = db_env_mapsize_expand(); /* grow */
-            if(grc != 0)
-                return db_map_mdb_err(grc); /* stop if grow failed */
-            goto retry_chunk;               /* retry whole chunk */
+            int grc = db_env_mapsize_expand();       /* grow */
+            if(grc != 0) return db_map_mdb_err(grc); /* stop if grow failed */
+            goto retry_chunk;                        /* retry whole chunk */
         }
         if(mrc != MDB_SUCCESS)
         {
@@ -480,10 +465,9 @@ retry_chunk:
         mdb_txn_abort(txn);
         if(mrc == MDB_MAP_FULL)
         {
-            int grc = db_env_mapsize_expand(); /* grow */
-            if(grc != 0)
-                return db_map_mdb_err(grc); /* hit max? bubble up */
-            goto retry_chunk;               /* 3) retry whole chunk */
+            int grc = db_env_mapsize_expand();       /* grow */
+            if(grc != 0) return db_map_mdb_err(grc); /* hit max? bubble up */
+            goto retry_chunk;                        /* 3) retry whole chunk */
         }
 
         return db_map_mdb_err(mrc);
@@ -493,8 +477,7 @@ retry_chunk:
 
 int db_user_list_all(uint8_t *out_ids, size_t *inout_count_max)
 {
-    if(!inout_count_max || !out_ids)
-        return -EINVAL;
+    if(!inout_count_max || !out_ids) return -EINVAL;
     size_t n = 0;
 
     MDB_txn *txn;
@@ -511,8 +494,7 @@ int db_user_list_all(uint8_t *out_ids, size_t *inout_count_max)
     for(int rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST); rc == MDB_SUCCESS;
         rc     = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
     {
-        if(k.mv_size != DB_ID_SIZE)
-            continue;
+        if(k.mv_size != DB_ID_SIZE) continue;
         if(n < *inout_count_max && out_ids)
             memcpy(out_ids + n * DB_ID_SIZE, k.mv_data, DB_ID_SIZE);
         n++;
@@ -525,8 +507,7 @@ int db_user_list_all(uint8_t *out_ids, size_t *inout_count_max)
 
 int db_user_list_publishers(uint8_t *out_ids, size_t *inout_count_max)
 {
-    if(!inout_count_max)
-        return -EINVAL;
+    if(!inout_count_max) return -EINVAL;
     size_t cap = out_ids ? *inout_count_max : 0, n = 0;
 
     MDB_txn *txn;
@@ -543,8 +524,7 @@ int db_user_list_publishers(uint8_t *out_ids, size_t *inout_count_max)
     for(int rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST); rc == MDB_SUCCESS;
         rc     = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
     {
-        if(k.mv_size != DB_ID_SIZE)
-            continue;
+        if(k.mv_size != DB_ID_SIZE) continue;
 
         uint8_t user_role = 0;
         db_user_get_and_check_mem(&v, NULL, &user_role, NULL, NULL, NULL);
@@ -564,8 +544,7 @@ int db_user_list_publishers(uint8_t *out_ids, size_t *inout_count_max)
 
 int db_user_list_viewers(uint8_t *out_ids, size_t *inout_count_max)
 {
-    if(!inout_count_max)
-        return -EINVAL;
+    if(!inout_count_max) return -EINVAL;
     size_t cap = out_ids ? *inout_count_max : 0, n = 0;
 
     MDB_txn *txn;
@@ -582,8 +561,7 @@ int db_user_list_viewers(uint8_t *out_ids, size_t *inout_count_max)
     for(int rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST); rc == MDB_SUCCESS;
         rc     = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
     {
-        if(k.mv_size != DB_ID_SIZE)
-            continue;
+        if(k.mv_size != DB_ID_SIZE) continue;
 
         uint8_t user_role = 0;
         db_user_get_and_check_mem(&v, NULL, &user_role, NULL, NULL, NULL);
@@ -605,26 +583,22 @@ int db_user_share_data_with_user_email(const uint8_t owner[DB_ID_SIZE],
                                        const uint8_t data_id[DB_ID_SIZE],
                                        const char    email[DB_EMAIL_MAX_LEN])
 {
-    if(!owner || !data_id || !email || email[0] == '\0')
-        return -EINVAL;
+    if(!owner || !data_id || !email || email[0] == '\0') return -EINVAL;
 
     uint8_t target[DB_ID_SIZE] = {0};
 
     /* Resolve recipient once (outside txn ok; id is stable). */
     {
         int rc = db_user_find_by_email(email, target);
-        if(rc != 0)
-            return rc; /* -ENOENT / -EIO / -EINVAL */
+        if(rc != 0) return rc; /* -ENOENT / -EIO / -EINVAL */
     }
 
     /* No-op if trying to share to self */
-    if(memcmp(owner, target, DB_ID_SIZE) == 0)
-        return 0;
+    if(memcmp(owner, target, DB_ID_SIZE) == 0) return 0;
 
 retry_txn:
     MDB_txn *txn = NULL;
-    if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS)
-        return -EIO;
+    if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS) return -EIO;
 
     /* Ensure data exists */
     {
@@ -682,12 +656,10 @@ retry_txn:
     if(mrc == MDB_MAP_FULL)
     {
         int grc = db_env_mapsize_expand();
-        if(grc != 0)
-            return db_map_mdb_err(grc);
+        if(grc != 0) return db_map_mdb_err(grc);
         goto retry_txn;
     }
-    if(mrc != MDB_SUCCESS)
-        return db_map_mdb_err(mrc);
+    if(mrc != MDB_SUCCESS) return db_map_mdb_err(mrc);
 
     return 0;
 }
@@ -706,27 +678,21 @@ int db_user_get_and_check_mem(const MDB_val *v, uint8_t *out_ver,
                               char     out_email[DB_EMAIL_MAX_LEN],
                               uint8_t *out_size)
 {
-    if(!v || v->mv_size < 3)
-        return -EINVAL;
+    if(!v || v->mv_size < 3) return -EINVAL;
 
     const uint8_t *p    = (const uint8_t *)v->mv_data;
     const uint8_t  ver  = p[0];
     const uint8_t  role = p[1];
     const uint8_t  el   = p[2];
 
-    if((size_t)3 + el > v->mv_size)
-        return -EINVAL;  // value too short
-    if(out_ver)
-        *out_ver = ver;
-    if(out_role)
-        *out_role = role;
-    if(out_email_len)
-        *out_email_len = el;
+    if((size_t)3 + el > v->mv_size) return -EINVAL;  // value too short
+    if(out_ver) *out_ver = ver;
+    if(out_role) *out_role = role;
+    if(out_email_len) *out_email_len = el;
 
     if(out_email)
     {
-        if(el >= DB_EMAIL_MAX_LEN)
-            return -ENOSPC;
+        if(el >= DB_EMAIL_MAX_LEN) return -ENOSPC;
         memcpy(out_email, p + 3, el);
         out_email[el] = '\0';
     }
@@ -750,8 +716,7 @@ static int db_user_set_role(uint8_t userId[DB_ID_SIZE], user_role_t role)
 
 retry_chunk:;
     MDB_txn *txn = NULL;
-    if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS)
-        return -EIO;
+    if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS) return -EIO;
 
     MDB_cursor *cur = NULL;
     if(mdb_cursor_open(txn, DB->db_user_id2data, &cur) != MDB_SUCCESS)
@@ -806,8 +771,7 @@ retry_chunk:;
     if(mrc == MDB_MAP_FULL)
     {
         int grc = db_env_mapsize_expand();
-        if(grc != 0)
-            return db_map_mdb_err(grc);
+        if(grc != 0) return db_map_mdb_err(grc);
         goto retry_chunk;
     }
     return db_map_mdb_err(mrc);
@@ -824,13 +788,11 @@ static void write_user_mem(uint8_t *dst, const char *email, uint8_t email_len,
 
 int sanitize_email(char email[DB_EMAIL_MAX_LEN], uint8_t *out_len)
 {
-    if(!email || !out_len)
-        return -ENOENT;
+    if(!email || !out_len) return -ENOENT;
 
     /* Require a NUL within the buffer */
     size_t len = strnlen(email, DB_EMAIL_MAX_LEN);
-    if(len == 0 || len >= DB_EMAIL_MAX_LEN)
-        return -ENOENT;
+    if(len == 0 || len >= DB_EMAIL_MAX_LEN) return -ENOENT;
 
     /* No leading/trailing spaces; no control chars/DEL/space anywhere */
     if(isspace((unsigned char)email[0]) ||
@@ -839,39 +801,31 @@ int sanitize_email(char email[DB_EMAIL_MAX_LEN], uint8_t *out_len)
     for(size_t k = 0; k < len; ++k)
     {
         unsigned char c = (unsigned char)email[k];
-        if(c <= 0x20 || c == 0x7F)
-            return -ENOENT; /* forbid space & controls */
+        if(c <= 0x20 || c == 0x7F) return -ENOENT; /* forbid space & controls */
     }
 
     /* Exactly one '@' and split */
     char *at = memchr(email, '@', len);
-    if(!at)
-        return -ENOENT;
-    if(memchr(at + 1, '@', (size_t)(email + len - (at + 1))))
-        return -ENOENT;
+    if(!at) return -ENOENT;
+    if(memchr(at + 1, '@', (size_t)(email + len - (at + 1)))) return -ENOENT;
 
     size_t local_len  = (size_t)(at - email);
     size_t domain_len = len - local_len - 1;
-    if(local_len == 0 || domain_len == 0)
-        return -ENOENT;
-    if(local_len > 64)
-        return -ENOENT;
+    if(local_len == 0 || domain_len == 0) return -ENOENT;
+    if(local_len > 64) return -ENOENT;
 
     /* Local-part: dot-atom, no leading/trailing dot, no ".." */
     {
         const unsigned char *p = (const unsigned char *)email;
-        if(p[0] == '.' || p[local_len - 1] == '.')
-            return -ENOENT;
+        if(p[0] == '.' || p[local_len - 1] == '.') return -ENOENT;
         int prev_dot = 0;
         for(size_t k = 0; k < local_len; ++k)
         {
             unsigned char c = p[k];
-            if(!is_local_allowed(c))
-                return -ENOENT;
+            if(!is_local_allowed(c)) return -ENOENT;
             if(c == '.')
             {
-                if(prev_dot)
-                    return -ENOENT;
+                if(prev_dot) return -ENOENT;
                 prev_dot = 1;
             }
             else
@@ -885,16 +839,14 @@ int sanitize_email(char email[DB_EMAIL_MAX_LEN], uint8_t *out_len)
        TLD length >= 2; lowercase domain in place */
     {
         unsigned char *p = (unsigned char *)(at + 1);
-        if(p[0] == '.' || p[domain_len - 1] == '.')
-            return -ENOENT;
+        if(p[0] == '.' || p[domain_len - 1] == '.') return -ENOENT;
 
         size_t label_len = 0;
         int    have_dot  = 0;
         for(size_t k = 0; k < domain_len; ++k)
         {
             unsigned char c = p[k];
-            if(!is_domain_allowed(c))
-                return -ENOENT;
+            if(!is_domain_allowed(c)) return -ENOENT;
 
             /* lowercase in-place (domain only) */
             if(c >= 'A' && c <= 'Z')
@@ -906,12 +858,9 @@ int sanitize_email(char email[DB_EMAIL_MAX_LEN], uint8_t *out_len)
             if(c == '.')
             {
                 have_dot = 1;
-                if(label_len == 0)
-                    return -ENOENT; /* empty label */
-                if(p[k - 1] == '-')
-                    return -ENOENT; /* ends with '-' */
-                if(label_len > 63)
-                    return -ENOENT;
+                if(label_len == 0) return -ENOENT;  /* empty label */
+                if(p[k - 1] == '-') return -ENOENT; /* ends with '-' */
+                if(label_len > 63) return -ENOENT;
                 label_len = 0;
             }
             else
@@ -921,16 +870,12 @@ int sanitize_email(char email[DB_EMAIL_MAX_LEN], uint8_t *out_len)
                 label_len++;
             }
         }
-        if(label_len == 0 || label_len > 63)
-            return -ENOENT;
-        if(!have_dot)
-            return -ENOENT;
-        if(label_len < 2)
-            return -ENOENT; /* TLD >= 2 */
+        if(label_len == 0 || label_len > 63) return -ENOENT;
+        if(!have_dot) return -ENOENT;
+        if(label_len < 2) return -ENOENT; /* TLD >= 2 */
     }
 
-    if(len > 255)
-        return -ENOENT; /* fits uint8_t design */
+    if(len > 255) return -ENOENT; /* fits uint8_t design */
 
     *out_len = (uint8_t)len;
     // if(len + 1 < DB_EMAIL_MAX_LEN)

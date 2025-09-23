@@ -1,8 +1,8 @@
 #ifndef DB_ACL_H
 #define DB_ACL_H
 
-#include "db_int.h"
 #include <stdint.h>
+#include "db_int.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -63,5 +63,9 @@ int acl_list_data_for_user(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
                            acl_iter_cb cb, void* user);
 
 int acl_data_destroy(MDB_txn* txn, const uint8_t resource[DB_ID_SIZE]);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* DB_ACL_H */

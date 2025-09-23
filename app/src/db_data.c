@@ -7,11 +7,11 @@
  * (c) 2025
  */
 
-#include "db_int.h"
 #include "db_acl.h"
-#include "uuid.h"
+#include "db_int.h"
 #include "fsutil.h"
 #include "sha256.h"
+#include "uuid.h"
 
 /****************************************************************************
  * PRIVATE DEFINES
@@ -58,10 +58,8 @@ static inline void write_data_meta(void *dst, const Sha256 *digest,
 
 static inline int db_data_get_and_check_mem(const MDB_val *v, DataMeta *out)
 {
-    if(!v || v->mv_size != sizeof(DataMeta))
-        return -EINVAL;
-    if(out)
-        memcpy(out, v->mv_data, sizeof *out);
+    if(!v || v->mv_size != sizeof(DataMeta)) return -EINVAL;
+    if(out) memcpy(out, v->mv_data, sizeof *out);
     return 0;
 }
 
@@ -72,8 +70,7 @@ static inline int db_data_get_and_check_mem(const MDB_val *v, DataMeta *out)
 
 int db_data_get_meta(uint8_t data_id[DB_ID_SIZE], DataMeta *out_meta)
 {
-    if(!out_meta)
-        return -EINVAL;
+    if(!out_meta) return -EINVAL;
     MDB_txn *txn;
     if(mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn) != MDB_SUCCESS)
         return -EIO;
@@ -96,29 +93,25 @@ int db_data_get_meta(uint8_t data_id[DB_ID_SIZE], DataMeta *out_meta)
 int db_data_get_path(uint8_t data_id[DB_ID_SIZE], char *out_path,
                      unsigned long out_sz)
 {
-    if(!out_path || out_sz == 0 || !data_id)
-        return -EINVAL;
+    if(!out_path || out_sz == 0 || !data_id) return -EINVAL;
 
     DataMeta meta;
     int      rc = db_data_get_meta(data_id, &meta);
-    if(rc != 0)
-        return rc; /* already -ENOENT / -EIO / -EINVAL */
+    if(rc != 0) return rc; /* already -ENOENT / -EIO / -EINVAL */
 
     char   hex[65];
     Sha256 d;
     memcpy(d.b, meta.sha, 32);
     crypt_sha256_hex(&d, hex);
 
-    if(path_sha256(out_path, out_sz, DB->root, hex) < 0)
-        return -EIO;
+    if(path_sha256(out_path, out_sz, DB->root, hex) < 0) return -EIO;
     return 0;
 }
 
 int db_data_add_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd, const char *mime,
                         uint8_t out_data_id[DB_ID_SIZE])
 {
-    if(!owner || src_fd < 0)
-        return -EINVAL;
+    if(!owner || src_fd < 0) return -EINVAL;
 
     user_role_t owner_role;
     memset(&owner_role, 0, sizeof(user_role_t));
@@ -126,10 +119,8 @@ int db_data_add_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd, const char *mime,
     /* Permission check: owner must exist and be a publisher */
     {
         int prc = db_user_get_role(owner, &owner_role);
-        if(prc != 0)
-            return db_map_mdb_err(prc);
-        if(owner_role != USER_ROLE_PUBLISHER)
-            return -EPERM;
+        if(prc != 0) return db_map_mdb_err(prc);
+        if(owner_role != USER_ROLE_PUBLISHER) return -EPERM;
     }
 
     /* One-pass ingest: stream → temp → fsync → atomic publish; compute digest+size */
@@ -148,8 +139,7 @@ retry_chunk:
     MDB_txn *txn = NULL;
 
     int mrc = mdb_txn_begin(DB->env, NULL, 0, &txn);
-    if(mrc != MDB_SUCCESS)
-        return db_map_mdb_err(mrc);
+    if(mrc != MDB_SUCCESS) return db_map_mdb_err(mrc);
 
     /* sha -> id, make sure unique exists */
     MDB_val shak = {.mv_size = 32, .mv_data = (void *)digest.b};
@@ -159,10 +149,9 @@ retry_chunk:
     if(mrc == MDB_MAP_FULL)
     {
         mdb_txn_abort(txn);
-        int grc = db_env_mapsize_expand(); /* grow */
-        if(grc != 0)
-            return db_map_mdb_err(grc); /* stop if grow failed */
-        goto retry_chunk;               /* retry whole chunk */
+        int grc = db_env_mapsize_expand();       /* grow */
+        if(grc != 0) return db_map_mdb_err(grc); /* stop if grow failed */
+        goto retry_chunk;                        /* retry whole chunk */
     }
     if(mrc != MDB_SUCCESS)
     {
@@ -180,10 +169,9 @@ retry_chunk:
     if(mrc == MDB_MAP_FULL)
     {
         mdb_txn_abort(txn);
-        int grc = db_env_mapsize_expand(); /* grow */
-        if(grc != 0)
-            return db_map_mdb_err(grc); /* stop if grow failed */
-        goto retry_chunk;               /* retry whole chunk */
+        int grc = db_env_mapsize_expand();       /* grow */
+        if(grc != 0) return db_map_mdb_err(grc); /* stop if grow failed */
+        goto retry_chunk;                        /* retry whole chunk */
     }
     if(mrc != MDB_SUCCESS)
     {
@@ -203,10 +191,9 @@ retry_chunk:
     if(mrc == MDB_MAP_FULL)
     {
         mdb_txn_abort(txn);
-        int grc = db_env_mapsize_expand(); /* grow */
-        if(grc != 0)
-            return db_map_mdb_err(grc); /* stop if grow failed */
-        goto retry_chunk;               /* retry whole chunk */
+        int grc = db_env_mapsize_expand();       /* grow */
+        if(grc != 0) return db_map_mdb_err(grc); /* stop if grow failed */
+        goto retry_chunk;                        /* retry whole chunk */
     }
     if(mrc != 0)
     {
@@ -218,8 +205,7 @@ retry_chunk:
     if(mrc == MDB_MAP_FULL)
     {
         int grc = db_env_mapsize_expand();
-        if(grc != 0)
-            return db_map_mdb_err(grc); /* stop if grow failed */
+        if(grc != 0) return db_map_mdb_err(grc); /* stop if grow failed */
         goto retry_chunk;
     }
     if(mrc != MDB_SUCCESS)
@@ -227,20 +213,17 @@ retry_chunk:
         /* txn is already aborted/freed on commit error */
         return db_map_mdb_err(mrc);
     }
-    if(out_data_id)
-        memcpy(out_data_id, data_id, DB_ID_SIZE);
+    if(out_data_id) memcpy(out_data_id, data_id, DB_ID_SIZE);
     return 0;
 }
 
 int db_data_delete(const uint8_t owner[DB_ID_SIZE],
                    const uint8_t data_id[DB_ID_SIZE])
 {
-    if(!owner || !data_id)
-        return -EINVAL;
+    if(!owner || !data_id) return -EINVAL;
 
     MDB_txn *txn = NULL;
-    if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS)
-        return -EIO;
+    if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS) return -EIO;
 
     /* must be owner */
     {
@@ -291,8 +274,7 @@ int db_data_delete(const uint8_t owner[DB_ID_SIZE],
     }
 
     int mrc = mdb_txn_commit(txn);
-    if(mrc != MDB_SUCCESS)
-        return db_map_mdb_err(mrc);
+    if(mrc != MDB_SUCCESS) return db_map_mdb_err(mrc);
 
     /* best-effort unlink (DB is source of truth) */
     {
@@ -314,8 +296,7 @@ int db_data_delete(const uint8_t owner[DB_ID_SIZE],
 
 static int db_user_get_role(const uint8_t id[DB_ID_SIZE], user_role_t *out_role)
 {
-    if(!id || !out_role)
-        return -EINVAL;
+    if(!id || !out_role) return -EINVAL;
 
     MDB_txn *txn = NULL;
     if(mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn) != MDB_SUCCESS)

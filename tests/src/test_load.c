@@ -1,17 +1,16 @@
 /* tests/src/test_load.c */
 
-#include <lmdb.h>
 #include <inttypes.h>  // for PRIu64
+#include <lmdb.h>
 
-#include "test_utils.h"
 #include "db_interface.h"
+#include "test_utils.h"
 
 /* helper: create file of `size` with deterministic content */
 static int make_blob_sized(const char* path, size_t size, uint32_t seed)
 {
     int fd = open(path, O_CREAT | O_RDWR | O_TRUNC, 0640);  // <-- O_RDWR
-    if(fd < 0)
-        return -1;
+    if(fd < 0) return -1;
 
     unsigned char hdr[16] = {'D', 'I', 'C', 'M', 0x00, 0x01, 0, 0,
                              0,   0,   0,   0,   0,    0,    0, 0};
@@ -38,8 +37,7 @@ static int make_blob_sized(const char* path, size_t size, uint32_t seed)
     while(written < size)
     {
         size_t chunk = size - written;
-        if(chunk > sizeof buf)
-            chunk = sizeof buf;
+        if(chunk > sizeof buf) chunk = sizeof buf;
         if(write(fd, buf, chunk) != (ssize_t)chunk)
         {
             close(fd);
@@ -55,8 +53,7 @@ static int make_blob_sized(const char* path, size_t size, uint32_t seed)
 static size_t env_sz(const char* key, size_t def)
 {
     const char* s = getenv(key);
-    if(!s || !*s)
-        return def;
+    if(!s || !*s) return def;
     size_t v = strtoull(s, NULL, 10);
     return v > 0 ? v : def;
 }
@@ -433,8 +430,7 @@ static int tl_upload_mixed_sizes_and_share_details(void)
         double t0 = tu_now_ms();
         for(size_t i = 0; i < b->n; i++)
         {
-            if(!b->ok[i])
-                continue; /* skip failed uploads */
+            if(!b->ok[i]) continue; /* skip failed uploads */
             const uint8_t* did = b->dids + i * DB_ID_SIZE;
             for(size_t s = 0; s < SHARES_PER_OBJ; s++)
             {

@@ -2,14 +2,14 @@
 #define _XOPEN_SOURCE 700
 #include "test_utils.h"
 
-#include <stdarg.h>
-#include <string.h>
-#include <errno.h>
-#include <sys/stat.h>
 #include <dirent.h>
-#include <unistd.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <stdarg.h>
 #include <stdbool.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 /* app headers */
 #include "db_interface.h"
@@ -56,8 +56,7 @@ void tu_failf(const char* file, int line, const char* fmt, ...)
 
 const char* tu_errname(int rc)
 {
-    if(rc >= 0)
-        return "OK";
+    if(rc >= 0) return "OK";
     switch(-rc)
     {
         case EINVAL:
@@ -81,13 +80,11 @@ const char* tu_errname(int rc)
 
 static int tu_sample_indices(size_t M, size_t N, size_t* out_indices)
 {
-    if(!out_indices || N > M)
-        return -1;
+    if(!out_indices || N > M) return -1;
 
     /* partial Fisher–Yates: shuffle only the first N positions */
     size_t* idx = (size_t*)malloc(M * sizeof(size_t));
-    if(!idx)
-        return -1;
+    if(!idx) return -1;
 
     for(size_t i = 0; i < M; ++i)
         idx[i] = i;
@@ -110,26 +107,22 @@ static int tu_sample_indices(size_t M, size_t N, size_t* out_indices)
 static int tu_du_inner(const char* path, uint64_t* total)
 {
     struct stat st;
-    if(lstat(path, &st) != 0)
-        return (errno == ENOENT) ? 0 : -1;
+    if(lstat(path, &st) != 0) return (errno == ENOENT) ? 0 : -1;
 
     if(S_ISREG(st.st_mode) || S_ISLNK(st.st_mode))
     {
         *total += (uint64_t)st.st_size;
         return 0;
     }
-    if(!S_ISDIR(st.st_mode))
-        return 0;
+    if(!S_ISDIR(st.st_mode)) return 0;
 
     DIR* d = opendir(path);
-    if(!d)
-        return -1;
+    if(!d) return -1;
 
     struct dirent* e;
     while((e = readdir(d)))
     {
-        if(!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
-            continue;
+        if(!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
         char p[PATH_MAX];
         snprintf(p, sizeof p, "%s/%s", path, e->d_name);
         if(tu_du_inner(p, total) != 0)
@@ -145,13 +138,10 @@ static int tu_du_inner(const char* path, uint64_t* total)
 char* tu_generate_email_list_seq(size_t n, const char* prefix,
                                  const char* domain)
 {
-    if(!domain)
-        domain = "@example.com";
-    if(!prefix)
-        prefix = "user_";
+    if(!domain) domain = "@example.com";
+    if(!prefix) prefix = "user_";
     char* buf = calloc(n, DB_EMAIL_MAX_LEN);
-    if(!buf)
-        return NULL;
+    if(!buf) return NULL;
     const size_t dom_len = strlen(domain);
     for(size_t i = 0; i < n; ++i)
     {
@@ -176,12 +166,10 @@ char* tu_generate_email_list_seq(size_t n, const char* prefix,
 
 char* tu_generate_email_list_sub_seq(const char* all_emails, size_t M, size_t N)
 {
-    if(!all_emails || N > M)
-        return NULL;
+    if(!all_emails || N > M) return NULL;
 
     size_t* picks = (size_t*)malloc(N * sizeof(size_t));
-    if(!picks)
-        return NULL;
+    if(!picks) return NULL;
 
     if(tu_sample_indices(M, N, picks) != 0)
     {
@@ -217,18 +205,15 @@ char* tu_generate_email_list_sub_seq(const char* all_emails, size_t M, size_t N)
 int tu_rm_rf(const char* path)
 {
     struct stat st;
-    if(lstat(path, &st) != 0)
-        return (errno == ENOENT) ? 0 : -1;
+    if(lstat(path, &st) != 0) return (errno == ENOENT) ? 0 : -1;
     if(S_ISDIR(st.st_mode))
     {
         DIR* d = opendir(path);
-        if(!d)
-            return -1;
+        if(!d) return -1;
         struct dirent* e;
         while((e = readdir(d)))
         {
-            if(!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
-                continue;
+            if(!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
             char p[PATH_MAX];
             snprintf(p, sizeof p, "%s/%s", path, e->d_name);
             if(tu_rm_rf(p) != 0)
@@ -255,8 +240,7 @@ bool tu_is_dir(const char* p)
 int tu_make_blob(const char* path, const char* tag)
 {
     int fd = open(path, O_CREAT | O_RDWR | O_TRUNC, 0640);
-    if(fd < 0)
-        return -1;
+    if(fd < 0) return -1;
     const unsigned char head[] = {'D', 'I', 'C', 'M', 0x00, 0x01};
     if(write(fd, head, sizeof head) != (ssize_t)sizeof head)
     {
@@ -286,13 +270,11 @@ void tu_hex16(char out[33], const uint8_t id[16])
 int tu_setup_store(Ctx* c)
 {
     snprintf(c->root, sizeof c->root, "./.testdb_%ld_XXXXXX", (long)getpid());
-    if(!mkdtemp(c->root))
-        return -1;
+    if(!mkdtemp(c->root)) return -1;
 
     const char*        ms     = getenv("LMDB_MAPSIZE_MB");
     unsigned long long map_mb = ms ? strtoull(ms, NULL, 10) : 256ULL;
-    if(db_open(c->root, map_mb << 20) != 0)
-        return -1;
+    if(db_open(c->root, map_mb << 20) != 0) return -1;
     return 0;
 }
 
@@ -340,8 +322,7 @@ int tu_io_set_files(const char* out_path, const char* err_path)
     if(out_path)
     {
         g_out_owned = fopen(out_path, "w");
-        if(!g_out_owned)
-            return -1;
+        if(!g_out_owned) return -1;
         g_out = g_out_owned;
     }
     if(err_path)
@@ -391,8 +372,7 @@ int tu_redirect_stdio_begin(const char* out_path, const char* err_path,
     if(out_path)
     {
         int fd = open(out_path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
-        if(fd < 0)
-            return -1;
+        if(fd < 0) return -1;
         int dupold = dup(STDOUT_FILENO);
         if(dupold < 0)
         {
@@ -411,8 +391,7 @@ int tu_redirect_stdio_begin(const char* out_path, const char* err_path,
     if(err_path)
     {
         int fd = open(err_path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
-        if(fd < 0)
-            return -1;
+        if(fd < 0) return -1;
         int dupold = dup(STDERR_FILENO);
         if(dupold < 0)
         {
@@ -436,15 +415,13 @@ int tu_redirect_stdio_end(int saved_fd[2])
     int rc = 0;
     if(saved_fd[0] >= 0)
     {
-        if(dup2(saved_fd[0], STDOUT_FILENO) < 0)
-            rc = -1;
+        if(dup2(saved_fd[0], STDOUT_FILENO) < 0) rc = -1;
         close(saved_fd[0]);
         saved_fd[0] = -1;
     }
     if(saved_fd[1] >= 0)
     {
-        if(dup2(saved_fd[1], STDERR_FILENO) < 0)
-            rc = -1;
+        if(dup2(saved_fd[1], STDERR_FILENO) < 0) rc = -1;
         close(saved_fd[1]);
         saved_fd[1] = -1;
     }
@@ -488,8 +465,7 @@ int tu_run_suite(const char* suite_name, const TU_Test* tests, size_t ntests,
         }
         else if(!strncmp(argv[i], "--suite", 7))
         {
-            if(i + 1 < argc)
-                i++; /* ignored */
+            if(i + 1 < argc) i++; /* ignored */
         }
         else
         { /* ignore unknowns to keep it simple */
@@ -521,8 +497,7 @@ int tu_run_suite(const char* suite_name, const TU_Test* tests, size_t ntests,
                 break;
             }
         }
-        if(grand_fail)
-            break;
+        if(grand_fail) break;
     }
 
     if(grand_fail == 0)
