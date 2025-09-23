@@ -11,7 +11,6 @@
 #define AUTH_INTERN_H
 
 #include <errno.h>
-#include <sodium.h>
 #include <string.h>
 // #include <lmdb.h>
 // #include <stddef.h>
@@ -21,6 +20,8 @@
 // #include <string.h>
 // #include <time.h>
 // #include <unistd.h>  // unlink
+
+#include <sodium.h>
 
 #include "auth_interface.h"
 #include "db_interface.h"
@@ -44,22 +45,6 @@ extern "C"
  */
 
 /* Records */
-
-typedef struct __attribute__((packed))
-{
-    char pwhash
-        [crypto_pwhash_STRBYTES]; /* libsodium hash string (NUL-terminated) */
-    uint8_t  algo_ver;            /* e.g., 1 */
-    uint64_t created;             /* absolute seconds */
-    uint64_t last_change;         /* absolute seconds */
-} UserPwdHash;
-
-typedef struct __attribute__((packed))
-{
-    /* record version */
-    uint8_t ver;
-
-} UserPwdHash;
 
 typedef struct __attribute__((packed))
 {

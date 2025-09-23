@@ -17,21 +17,22 @@
  * PUBLIC DEFINES
  ****************************************************************************
  */
-
-#define PASSWORD_BLOB_MAX 128  // enough for sodium's encoded string
+#define PASSWORD_VERSION 0
 
 /****************************************************************************
  * PUBLIC STRUCTURED VARIABLES
  ****************************************************************************
  */
+/* None */
 
 /****************************************************************************
  * PUBLIC FUNCTIONS DECLARATIONS
  ****************************************************************************
  */
+/* None */
 
 // hash -> opaque, self-describing blob (algorithm + params + salt + hash).
-int password_hash(const char* password, char out_blob[PASSWORD_BLOB_MAX]);
+int password_hash(const char* password, char* out_blob);
 
 // verify -> 0 ok, -EPERM mismatch, <0 other errors. Can set *needs_rehash=1.
 int password_verify(const char* password, const char* blob, int* needs_rehash);

@@ -7,8 +7,8 @@
  * (c) 2025
  */
 
-#include <sodium.h>
 #include "auth_intern.h"
+#include "password.h"
 // #include "sha256.h"       /* your SHA-256 for token hashing */
 // #include "db_intern.h"       /* DB, DB->db_* */
 // #include "db_interface.h" /* db_user_find_by_email, db_add_user, ... */
@@ -45,34 +45,25 @@ static int token_raw_from_b64(
  ****************************************************************************
  */
 
-int auth_crypto_init(void)
-{
-    if(sodium_init() < 0) return -EIO;
-    const char* pep = getenv("AUTH_PEPPER_HEX");
-    if(pep && pep[0])
-    {
-        size_t outlen = 0;
-        if(sodium_hex2bin(G_PEPPER, sizeof G_PEPPER, pep, strlen(pep), NULL,
-                          &outlen, NULL) == 0 &&
-           outlen == 32)
-        {
-            G_HAVE_PEPPER = 1;
-        }
-    }
-    return 0;
-}
-
-int auth_register_local(const char* email, const char* password,
-                        uint8_t out_user_id[DB_ID_SIZE])
+int auth_register_local(const char* email, const char* password)
 {
     if(!email || !*email || !password || !*password) return -EINVAL;
-    /* Step 1: create user (or fail if exists) */
-    uint8_t uid[DB_ID_SIZE] = {0};
-    int     rc              = db_add_user((char*)email, uid);
-    if(rc == -EEXIST) return -EEXIST;
-    if(rc != 0) return rc;
 
-    /* Step 2: hash password */
+    /* create user (or fail if exists) */
+    uint8_t user_id[DB_ID_SIZE] = {0};
+    int     ret                 = db_add_user(email, user_id);
+
+    if(ret != 0)
+    {
+        /* EEXIST included */
+        goto fail;
+    }
+
+    /* 1) id -> user */
+    enc_user_ctx uctx = {
+        .ver = DB_VER, .role = USER_ROLE_NONE, .elen = elen, .email = email};
+
+    /* hash password */
     UserPwdHash rec;
     memset(&rec, 0, sizeof rec);
     rec.ver = AUTH_VER;
@@ -95,6 +86,9 @@ int auth_register_local(const char* email, const char* password,
 
     if(out_user_id) memcpy(out_user_id, uid, DB_ID_SIZE);
     return 0;
+
+fail:
+    return ret;
 }
 
 int auth_login_password(const char* email, const char* password,

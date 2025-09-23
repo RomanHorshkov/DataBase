@@ -33,14 +33,7 @@ extern "C"
  ****************************************************************************
  */
 
-/* Initialize crypto (libsodium) once. Call at process start (or inside
- * db_open). */
-int auth_crypto_init(void);
-
-/* Register local account (email must not exist). Also persists Argon2id hash.
- */
-int auth_register_local(const char *email, const char *password,
-                        uint8_t out_user_id[DB_ID_SIZE]);
+int auth_register_local(const char *email, const char *password);
 
 /* Verify password and issue a session (Set-Cookie uses returned token). */
 int auth_login_password(const char *email, const char *password,

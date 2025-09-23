@@ -81,11 +81,11 @@ typedef uint8_t user_role_t;
 
 typedef struct __attribute__((packed))
 {
-    uint8_t     ver;              /* 1 byte version for future evolution */
-    user_role_t role;             /* 1 byte role */
-    uint8_t     email_len;        /* 1 byte email length */
-    char email[DB_EMAIL_MAX_LEN]; /* variable-length zero-terminated email */
-} UserPacked;
+    uint8_t     ver;       /* 1 byte version for future evolution */
+    user_role_t role;      /* 1 byte role */
+    uint8_t     email_len; /* 1 byte email length */
+    char       *email;     /* variable-length zero-terminated email */
+} user_data_packed_t;
 
 /****************************************************************************
  * PUBLIC FUNCTIONS DECLARATIONS

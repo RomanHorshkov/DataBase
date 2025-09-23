@@ -54,135 +54,17 @@
  * PRIVATE FUNCTIONS PROTOTYPES
  ****************************************************************************
  */
-/* None */
+
+static int write_all(int fd, const uint8_t* p, size_t n);
+
+static int fsync_parent_dir(const char* path);
+
+static int digest_fd_evp(int fd, Sha256* out, size_t* size_out);
 
 /****************************************************************************
  * PUBLIC FUNCTIONS DEFINITIONS
  ****************************************************************************
  */
-
-static int write_all(int fd, const uint8_t* p, size_t n)
-{
-    size_t off = 0;
-    while(off < n)
-    {
-        ssize_t wr = write(fd, p + off, n - off);
-        if(wr > 0)
-        {
-            off += (size_t)wr;
-            continue;
-        }
-        if(wr < 0 && errno == EINTR) continue;
-        return -1;
-    }
-    return 0;
-}
-
-static int fsync_parent_dir(const char* path)
-{
-    char   tmp[PATH_MAX];
-    size_t len = strnlen(path, sizeof tmp);
-    if(len == 0 || len >= sizeof tmp)
-    {
-        errno = ENAMETOOLONG;
-        return -1;
-    }
-    memcpy(tmp, path, len + 1);
-
-    /* find last '/' */
-    char* last = strrchr(tmp, '/');
-    if(!last)
-    { /* file in cwd: fsync(".") is not portable; open(".") */
-        int dfd = open(".", O_RDONLY | O_DIRECTORY);
-        if(dfd < 0) return -1;
-        int rc = fsync(dfd);
-        int e  = errno;
-        close(dfd);
-        if(rc != 0)
-        {
-            errno = e;
-            return -1;
-        }
-        return 0;
-    }
-    *last   = '\0';
-    int dfd = open(tmp, O_RDONLY | O_DIRECTORY);
-    if(dfd < 0) return -1;
-    int rc = fsync(dfd);
-    int e  = errno;
-    close(dfd);
-    if(rc != 0)
-    {
-        errno = e;
-        return -1;
-    }
-    return 0;
-}
-
-static int digest_fd_evp(int fd, Sha256* out, size_t* size_out)
-{
-    if(!out)
-    {
-        errno = EINVAL;
-        return -1;
-    }
-
-    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-    if(!ctx)
-    {
-        errno = ENOMEM;
-        return -1;
-    }
-
-    int     rc = -1;
-    uint8_t buf[CRYPTO_READ_BUFSZ];
-    size_t  total = 0;
-
-    if(EVP_DigestInit_ex(ctx, EVP_sha256(), NULL) != 1)
-    {
-        errno = EIO;
-        goto done;
-    }
-
-    for(;;)
-    {
-        ssize_t rd = read(fd, buf, sizeof buf);
-        if(rd > 0)
-        {
-            if(EVP_DigestUpdate(ctx, buf, (size_t)rd) != 1)
-            {
-                errno = EIO;
-                goto done;
-            }
-            total += (size_t)rd;
-            continue;
-        }
-        if(rd == 0) break;
-        if(errno == EINTR) continue;
-
-        if(errno == EAGAIN || errno == EWOULDBLOCK)
-        {
-            struct pollfd p  = {.fd = fd, .events = POLLIN};
-            int           pr = poll(&p, 1, -1);
-            if(pr > 0 || (pr < 0 && errno == EINTR)) continue;
-        }
-        goto done;
-    }
-
-    unsigned outlen = 0;
-    if(EVP_DigestFinal_ex(ctx, out->b, &outlen) != 1 || outlen != 32)
-    {
-        errno = EIO;
-        goto done;
-    }
-    if(size_out) *size_out = total;
-    rc = 0;
-done:
-    EVP_MD_CTX_free(ctx);
-    return rc;
-}
-
-/* --- public API ---------------------------------------------------------- */
 
 void crypt_sha256_hex(const Sha256* d, char out[65])
 {
@@ -472,4 +354,130 @@ int crypt_store_sha256_object_from_fd(const char* root, int src_fd,
     if(digest_out) *digest_out = d;
     if(size_out) *size_out = total;
     return 0;
+}
+
+/****************************************************************************
+ * PRIVATE FUNCTIONS DEFINITIONS
+ ****************************************************************************
+ */
+
+static int write_all(int fd, const uint8_t* p, size_t n)
+{
+    size_t off = 0;
+    while(off < n)
+    {
+        ssize_t wr = write(fd, p + off, n - off);
+        if(wr > 0)
+        {
+            off += (size_t)wr;
+            continue;
+        }
+        if(wr < 0 && errno == EINTR) continue;
+        return -1;
+    }
+    return 0;
+}
+
+static int fsync_parent_dir(const char* path)
+{
+    char   tmp[PATH_MAX];
+    size_t len = strnlen(path, sizeof tmp);
+    if(len == 0 || len >= sizeof tmp)
+    {
+        errno = ENAMETOOLONG;
+        return -1;
+    }
+    memcpy(tmp, path, len + 1);
+
+    /* find last '/' */
+    char* last = strrchr(tmp, '/');
+    if(!last)
+    { /* file in cwd: fsync(".") is not portable; open(".") */
+        int dfd = open(".", O_RDONLY | O_DIRECTORY);
+        if(dfd < 0) return -1;
+        int rc = fsync(dfd);
+        int e  = errno;
+        close(dfd);
+        if(rc != 0)
+        {
+            errno = e;
+            return -1;
+        }
+        return 0;
+    }
+    *last   = '\0';
+    int dfd = open(tmp, O_RDONLY | O_DIRECTORY);
+    if(dfd < 0) return -1;
+    int rc = fsync(dfd);
+    int e  = errno;
+    close(dfd);
+    if(rc != 0)
+    {
+        errno = e;
+        return -1;
+    }
+    return 0;
+}
+
+static int digest_fd_evp(int fd, Sha256* out, size_t* size_out)
+{
+    if(!out)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if(!ctx)
+    {
+        errno = ENOMEM;
+        return -1;
+    }
+
+    int     rc = -1;
+    uint8_t buf[CRYPTO_READ_BUFSZ];
+    size_t  total = 0;
+
+    if(EVP_DigestInit_ex(ctx, EVP_sha256(), NULL) != 1)
+    {
+        errno = EIO;
+        goto done;
+    }
+
+    for(;;)
+    {
+        ssize_t rd = read(fd, buf, sizeof buf);
+        if(rd > 0)
+        {
+            if(EVP_DigestUpdate(ctx, buf, (size_t)rd) != 1)
+            {
+                errno = EIO;
+                goto done;
+            }
+            total += (size_t)rd;
+            continue;
+        }
+        if(rd == 0) break;
+        if(errno == EINTR) continue;
+
+        if(errno == EAGAIN || errno == EWOULDBLOCK)
+        {
+            struct pollfd p  = {.fd = fd, .events = POLLIN};
+            int           pr = poll(&p, 1, -1);
+            if(pr > 0 || (pr < 0 && errno == EINTR)) continue;
+        }
+        goto done;
+    }
+
+    unsigned outlen = 0;
+    if(EVP_DigestFinal_ex(ctx, out->b, &outlen) != 1 || outlen != 32)
+    {
+        errno = EIO;
+        goto done;
+    }
+    if(size_out) *size_out = total;
+    rc = 0;
+done:
+    EVP_MD_CTX_free(ctx);
+    return rc;
 }

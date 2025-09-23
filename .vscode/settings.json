@@ -18,6 +18,7 @@
         "db_interface.h": "c",
         "lmdb.h": "c",
         "ctype.h": "c",
-        "errno.h": "c"
+        "errno.h": "c",
+        "db_intern.h": "c"
     }
 }
