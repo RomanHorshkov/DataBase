@@ -8,21 +8,21 @@
  */
 
 #include "uuid.h"
-#include <fcntl.h>
 #include <stdatomic.h>
-#include <unistd.h>
+#include <time.h>
+#include "utils_interface.h"
+
 #if defined(__linux__)
 /* try getrandom first (non-blocking semantics with urandom pool after init)*/
 #    include <sys/random.h>
 #endif
 
-#include "db_int.h"
-
 /****************************************************************************
  * PRIVATE DEFINES
  ****************************************************************************
  */
-/* None */
+
+#define UUID_BYTES_SIZE 16
 
 /****************************************************************************
  * PRIVATE STUCTURED VARIABLES
@@ -49,7 +49,7 @@ static int             fill_random(void* p, size_t n);
  * PUBLIC FUNCTIONS DEFINITIONS
  ****************************************************************************
  */
-int uuid_v4(uint8_t out[UUID_BYTES_SIZE])
+int uuid_v4(uint8_t* out)
 {
     if(fill_random(out, 16) != 0) return -1;
     out[6] = (out[6] & 0x0F) | 0x40;  // version 4
@@ -57,9 +57,9 @@ int uuid_v4(uint8_t out[UUID_BYTES_SIZE])
     return 0;
 }
 
-int uuid_v7(uint8_t out[UUID_BYTES_SIZE])
+int uuid_v7(uint8_t* out)
 {
-    static uint8_t last_id[DB_ID_SIZE] = {0}; /* monotonic guard */
+    static uint8_t last_id[UUID_BYTES_SIZE] = {0}; /* monotonic guard */
     /* Reserve strictly increasing (ms,seq) using a CAS loop */
     uint64_t use_ms;
     uint16_t seq12;
@@ -137,7 +137,11 @@ restart:
     out[14] = rb[6];
     out[15] = rb[7];
 
-    if(memcmp(last_id, out, DB_ID_SIZE) == 0) goto restart;
+    if(memcmp(last_id, out, UUID_BYTES_SIZE) == 0)
+    {
+        memcpy(last_id, out, UUID_BYTES_SIZE);
+        goto restart;
+    }
 
     return 0;
 }

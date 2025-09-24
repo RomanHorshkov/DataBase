@@ -38,10 +38,10 @@ static int make_blob(const char* path, const char* tag)
     return fd;
 }
 
-static void print_id(const char* label, uint8_t id[DB_ID_SIZE])
+static void print_id(const char* label, uint8_t id[DB_UUID_SIZE])
 {
     printf("%s: ", label);
-    for(int i = 0; i < DB_ID_SIZE; i++)
+    for(int i = 0; i < DB_UUID_SIZE; i++)
         printf("%02x", id[i]);
     puts("");
 }
@@ -53,7 +53,7 @@ static void db_print_users(void)
     db_user_list_all(users_of_interest, &num_users);
     for(size_t i = 0; i < num_users; i++)
     {
-        print_id("User:", users_of_interest + i * DB_ID_SIZE);
+        print_id("User:", users_of_interest + i * DB_UUID_SIZE);
     }
 }
 
@@ -64,7 +64,7 @@ static void db_print_publishers(void)
     db_user_list_publishers(users_of_interest, &num_users);
     for(size_t i = 0; i < num_users; i++)
     {
-        print_id("Publisher:", users_of_interest + i * DB_ID_SIZE);
+        print_id("Publisher:", users_of_interest + i * DB_UUID_SIZE);
     }
 }
 
@@ -75,7 +75,7 @@ static void db_print_viewers(void)
     db_user_list_viewers(users_of_interest, &num_users);
     for(size_t i = 0; i < num_users; i++)
     {
-        print_id("Viewer:", users_of_interest + i * DB_ID_SIZE);
+        print_id("Viewer:", users_of_interest + i * DB_UUID_SIZE);
     }
 }
 
@@ -104,11 +104,15 @@ int main(void)
     char    roman[DB_EMAIL_MAX_LEN]  = "roman@example.com";
     char    luca[DB_EMAIL_MAX_LEN]   = "luca@example.com";
     char    franco[DB_EMAIL_MAX_LEN] = "franco@example.com";
-    uint8_t UA[DB_ID_SIZE] = {0}, UB[DB_ID_SIZE] = {0}, UC[DB_ID_SIZE] = {0},
-            UD[DB_ID_SIZE] = {0}, UE[DB_ID_SIZE] = {0}, UF[DB_ID_SIZE] = {0},
-            UG[DB_ID_SIZE] = {0}, UH[DB_ID_SIZE] = {0};
+    uint8_t UA[DB_UUID_SIZE] = {0}, UB[DB_UUID_SIZE] = {0},
+            UC[DB_UUID_SIZE] = {0}, UD[DB_UUID_SIZE] = {0},
+            UE[DB_UUID_SIZE] = {0}, UF[DB_UUID_SIZE] = {0},
+            UG[DB_UUID_SIZE] = {0}, UH[DB_UUID_SIZE] = {0};
 
-    CHECK(db_add_user(alice, UA));
+
+    // auth_register_new(alice, UA)
+
+    CHECK(auth_register_new(alice, UA));
     CHECK(db_add_user(bob, UB));
     CHECK(db_add_user(carol, UC));
     CHECK(db_add_user(anton, UD));
@@ -133,8 +137,8 @@ int main(void)
 
     /* upload under Alice */
     puts("=== Alice uploads ===");
-    uint8_t D_shared[DB_ID_SIZE] = {0}, D_A[DB_ID_SIZE] = {0},
-            D_B[DB_ID_SIZE] = {0};
+    uint8_t D_shared[DB_UUID_SIZE] = {0}, D_A[DB_UUID_SIZE] = {0},
+            D_B[DB_UUID_SIZE] = {0};
     db_data_add_from_fd(UA, fd_shared, "application/dicom", D_shared);
     // db_data_add_from_fd(UA, fd_A,      "application/dicom", D_A);
     // db_data_add_from_fd(UA, fd_B,      "application/dicom", D_B);

@@ -42,8 +42,8 @@ int t_add_user_and_find(void)
         return -1;
     }
 
-    uint8_t id[DB_ID_SIZE]  = {0};
-    uint8_t id2[DB_ID_SIZE] = {0};
+    uint8_t id[DB_UUID_SIZE]  = {0};
+    uint8_t id2[DB_UUID_SIZE] = {0};
 
     size_t n_users = 1;
     char  *emails  = tu_generate_email_list_seq(n_users, NULL, NULL);
@@ -88,7 +88,7 @@ int t_roles_and_listing(void)
         tu_failf(__FILE__, __LINE__, "setup failed");
         return -1;
     }
-    uint8_t ID_A[DB_ID_SIZE] = {0}, ID_B[DB_ID_SIZE] = {0};
+    uint8_t ID_A[DB_UUID_SIZE] = {0}, ID_B[DB_UUID_SIZE] = {0};
     char    ea[DB_EMAIL_MAX_LEN];
     snprintf(ea, sizeof ea, "%s", "abc@xbc.com");
     char eb[DB_EMAIL_MAX_LEN];
@@ -133,12 +133,12 @@ int t_upload_requires_publisher(void)
         tu_failf(__FILE__, __LINE__, "setup failed");
         return -1;
     }
-    uint8_t A[DB_ID_SIZE] = {0};
+    uint8_t A[DB_UUID_SIZE] = {0};
     char    ea[DB_EMAIL_MAX_LEN];
     snprintf(ea, sizeof ea, "%s", "a@x.com");
     int fd = tu_make_blob("./.tmp_blob.dcm", "shared-seed-001");
     EXPECT_TRUE(fd >= 0);
-    uint8_t D[DB_ID_SIZE] = {0};
+    uint8_t D[DB_UUID_SIZE] = {0};
 
     EXPECT_EQ_RC(db_add_user(ea, A), 0);
 
@@ -175,9 +175,9 @@ int t_dedup_same_sha(void)
     int fd = tu_make_blob("./.tmp_blob2.dcm", "same-content");
     EXPECT_TRUE(fd >= 0);
     lseek(fd, 0, SEEK_SET);
-    uint8_t D1[DB_ID_SIZE] = {0}, D2[DB_ID_SIZE] = {0};
+    uint8_t D1[DB_UUID_SIZE] = {0}, D2[DB_UUID_SIZE] = {0};
 
-    uint8_t A[DB_ID_SIZE] = {0};
+    uint8_t A[DB_UUID_SIZE] = {0};
     char    ea[DB_EMAIL_MAX_LEN];
     snprintf(ea, sizeof ea, "%s", "a@x.com");
 
@@ -205,7 +205,7 @@ int t_share_by_email(void)
         tu_failf(__FILE__, __LINE__, "setup failed");
         return -1;
     }
-    uint8_t A[DB_ID_SIZE] = {0}, B[DB_ID_SIZE] = {0};
+    uint8_t A[DB_UUID_SIZE] = {0}, B[DB_UUID_SIZE] = {0};
     char    e_alice[DB_EMAIL_MAX_LEN];
     snprintf(e_alice, sizeof e_alice, "%s", "alice@x.com");
     char e_bob[DB_EMAIL_MAX_LEN];
@@ -216,7 +216,7 @@ int t_share_by_email(void)
 
     int fd = tu_make_blob("./.tmp_blob3.dcm", "to-share");
     EXPECT_TRUE(fd >= 0);
-    uint8_t D[DB_ID_SIZE] = {0};
+    uint8_t D[DB_UUID_SIZE] = {0};
     EXPECT_EQ_RC(db_data_add_from_fd(A, fd, "application/dicom", D), 0);
 
     /* share D with bob via email */
@@ -236,7 +236,7 @@ int t_resolve_path_points_to_object(void)
         tu_failf(__FILE__, __LINE__, "setup failed");
         return -1;
     }
-    uint8_t A[DB_ID_SIZE] = {0};
+    uint8_t A[DB_UUID_SIZE] = {0};
     char    ea[DB_EMAIL_MAX_LEN];
     snprintf(ea, sizeof ea, "%s", "a@x.com");
     db_add_user(ea, A);
@@ -244,7 +244,7 @@ int t_resolve_path_points_to_object(void)
 
     int fd = tu_make_blob("./.tmp_blob4.dcm", "path-check");
     EXPECT_TRUE(fd >= 0);
-    uint8_t D[DB_ID_SIZE] = {0};
+    uint8_t D[DB_UUID_SIZE] = {0};
     EXPECT_EQ_RC(db_data_add_from_fd(A, fd, "application/dicom", D), 0);
 
     char path[PATH_MAX];
@@ -268,8 +268,9 @@ t_share_requires_relationship(void)
         return -1;
     }
 
-    uint8_t A[DB_ID_SIZE] = {0}, B[DB_ID_SIZE] = {0}, Cc[DB_ID_SIZE] = {0};
-    char    ea[DB_EMAIL_MAX_LEN];
+    uint8_t A[DB_UUID_SIZE] = {0}, B[DB_UUID_SIZE] = {0},
+            Cc[DB_UUID_SIZE] = {0};
+    char ea[DB_EMAIL_MAX_LEN];
     snprintf(ea, sizeof ea, "%s", "a@x.com");
     char eb[DB_EMAIL_MAX_LEN];
     snprintf(eb, sizeof eb, "%s", "b@x.com");
@@ -284,7 +285,7 @@ t_share_requires_relationship(void)
 
     int fd = tu_make_blob("./.tmp_blob5.dcm", "owned-by-B");
     EXPECT_TRUE(fd >= 0);
-    uint8_t D[DB_ID_SIZE] = {0};
+    uint8_t D[DB_UUID_SIZE] = {0};
     EXPECT_EQ_RC(db_data_add_from_fd(B, fd, "application/dicom", D), 0);
 
     /* A cannot share (not owner) */
@@ -315,8 +316,9 @@ int t_owner_delete_cascade(void)
         return -1;
     }
 
-    uint8_t O[DB_ID_SIZE] = {0}, U1[DB_ID_SIZE] = {0}, U2[DB_ID_SIZE] = {0};
-    char    eo[DB_EMAIL_MAX_LEN];
+    uint8_t O[DB_UUID_SIZE] = {0}, U1[DB_UUID_SIZE] = {0},
+            U2[DB_UUID_SIZE] = {0};
+    char eo[DB_EMAIL_MAX_LEN];
     snprintf(eo, sizeof eo, "%s", "owner@x.com");
     char eu1[DB_EMAIL_MAX_LEN];
     snprintf(eu1, sizeof eu1, "%s", "u1@x.com");
@@ -329,7 +331,7 @@ int t_owner_delete_cascade(void)
 
     int fd = tu_make_blob("./.tmp_blob6.dcm", "delete-me");
     EXPECT_TRUE(fd >= 0);
-    uint8_t D[DB_ID_SIZE] = {0};
+    uint8_t D[DB_UUID_SIZE] = {0};
     EXPECT_EQ_RC(db_data_add_from_fd(O, fd, "application/dicom", D), 0);
 
     /* share to both */
@@ -375,7 +377,7 @@ int t_no_dedup_second_upload_fails_and_owner_deletes(void)
     int fd = tu_make_blob("./.tmp_blob7.dcm", "same-bits");
     EXPECT_TRUE(fd >= 0);
 
-    uint8_t A[DB_ID_SIZE] = {0}, B[DB_ID_SIZE] = {0};
+    uint8_t A[DB_UUID_SIZE] = {0}, B[DB_UUID_SIZE] = {0};
     char    ea[DB_EMAIL_MAX_LEN];
     snprintf(ea, sizeof ea, "%s", "a@x.com");
     char eb[DB_EMAIL_MAX_LEN];
@@ -385,7 +387,7 @@ int t_no_dedup_second_upload_fails_and_owner_deletes(void)
     db_add_user(eb, B);
     db_user_set_role_publisher(B);
 
-    uint8_t D1[DB_ID_SIZE] = {0}, D2[DB_ID_SIZE] = {0};
+    uint8_t D1[DB_UUID_SIZE] = {0}, D2[DB_UUID_SIZE] = {0};
 
     /* First upload creates object */
     EXPECT_EQ_RC(db_data_add_from_fd(A, fd, "application/dicom", D1), 0);
@@ -425,7 +427,7 @@ int t_share_idempotent(void)
         return -1;
     }
 
-    uint8_t O[DB_ID_SIZE] = {0}, U[DB_ID_SIZE] = {0};
+    uint8_t O[DB_UUID_SIZE] = {0}, U[DB_UUID_SIZE] = {0};
     char    eo[DB_EMAIL_MAX_LEN];
     snprintf(eo, sizeof eo, "%s", "own@x.com");
     char eu[DB_EMAIL_MAX_LEN];
@@ -437,7 +439,7 @@ int t_share_idempotent(void)
 
     int fd = tu_make_blob("./.tmp_blob_idem.dcm", "idem");
     EXPECT_TRUE(fd >= 0);
-    uint8_t D[DB_ID_SIZE] = {0};
+    uint8_t D[DB_UUID_SIZE] = {0};
     EXPECT_EQ_RC(db_data_add_from_fd(O, fd, "x/bin", D), 0);
 
     EXPECT_EQ_RC(db_user_share_data_with_user_email(O, D, eu), 0);
@@ -460,7 +462,7 @@ int t_share_self_noop(void)
         return -1;
     }
 
-    uint8_t O[DB_ID_SIZE] = {0};
+    uint8_t O[DB_UUID_SIZE] = {0};
     char    eo[DB_EMAIL_MAX_LEN];
     snprintf(eo, sizeof eo, "%s", "self@x.com");
     db_add_user(eo, O);
@@ -468,7 +470,7 @@ int t_share_self_noop(void)
 
     int fd = tu_make_blob("./.tmp_blob_self.dcm", "self");
     EXPECT_TRUE(fd >= 0);
-    uint8_t D[DB_ID_SIZE] = {0};
+    uint8_t D[DB_UUID_SIZE] = {0};
     EXPECT_EQ_RC(db_data_add_from_fd(O, fd, "x/bin", D), 0);
 
     EXPECT_EQ_RC(db_user_share_data_with_user_email(O, D, eo), 0);
@@ -489,7 +491,7 @@ int t_share_to_missing_email(void)
         return -1;
     }
 
-    uint8_t O[DB_ID_SIZE] = {0};
+    uint8_t O[DB_UUID_SIZE] = {0};
     char    eo[DB_EMAIL_MAX_LEN];
     char    nob[DB_EMAIL_MAX_LEN];
     snprintf(eo, sizeof eo, "%s", "o@x.com");
@@ -499,7 +501,7 @@ int t_share_to_missing_email(void)
 
     int fd = tu_make_blob("./.tmp_blob_missing.dcm", "x");
     EXPECT_TRUE(fd >= 0);
-    uint8_t D[DB_ID_SIZE] = {0};
+    uint8_t D[DB_UUID_SIZE] = {0};
     EXPECT_EQ_RC(db_data_add_from_fd(O, fd, "x/bin", D), 0);
 
     EXPECT_EQ_RC(db_user_share_data_with_user_email(O, D, nob), -ENOENT);
@@ -520,7 +522,7 @@ int t_share_denied_when_not_owner(void)
         return -1;
     }
 
-    uint8_t O[DB_ID_SIZE] = {0}, V[DB_ID_SIZE] = {0}, Z[DB_ID_SIZE] = {0};
+    uint8_t O[DB_UUID_SIZE] = {0}, V[DB_UUID_SIZE] = {0}, Z[DB_UUID_SIZE] = {0};
     char    eo[DB_EMAIL_MAX_LEN];
     snprintf(eo, sizeof eo, "%s", "o@x.com");
     char ev[DB_EMAIL_MAX_LEN];
@@ -536,7 +538,7 @@ int t_share_denied_when_not_owner(void)
 
     int fd = tu_make_blob("./.tmp_blob_noshare.dcm", "x");
     EXPECT_TRUE(fd >= 0);
-    uint8_t D[DB_ID_SIZE] = {0};
+    uint8_t D[DB_UUID_SIZE] = {0};
     EXPECT_EQ_RC(db_data_add_from_fd(O, fd, "x/bin", D), 0);
 
     EXPECT_EQ_RC(db_user_share_data_with_user_email(O, D, ev),
@@ -560,7 +562,7 @@ int t_double_delete_semantics(void)
         return -1;
     }
 
-    uint8_t O[DB_ID_SIZE] = {0};
+    uint8_t O[DB_UUID_SIZE] = {0};
     char    eo[DB_EMAIL_MAX_LEN];
     snprintf(eo, sizeof eo, "%s", "o2@x.com");
     db_add_user(eo, O);
@@ -568,7 +570,7 @@ int t_double_delete_semantics(void)
 
     int fd = tu_make_blob("./.tmp_blob_dd.dcm", "x");
     EXPECT_TRUE(fd >= 0);
-    uint8_t D[DB_ID_SIZE] = {0};
+    uint8_t D[DB_UUID_SIZE] = {0};
     EXPECT_EQ_RC(db_data_add_from_fd(O, fd, "x/bin", D), 0);
 
     char path[PATH_MAX];
@@ -594,7 +596,7 @@ int t_same_user_second_upload_fails(void)
         return -1;
     }
 
-    uint8_t P[DB_ID_SIZE] = {0};
+    uint8_t P[DB_UUID_SIZE] = {0};
     char    ep[DB_EMAIL_MAX_LEN];
     snprintf(ep, sizeof ep, "%s", "p@x.com");
     db_add_user(ep, P);
@@ -603,7 +605,7 @@ int t_same_user_second_upload_fails(void)
     int fd = tu_make_blob("./.tmp_blob_sameuser.dcm", "abc");
     EXPECT_TRUE(fd >= 0);
 
-    uint8_t D1[DB_ID_SIZE] = {0}, D2[DB_ID_SIZE] = {0};
+    uint8_t D1[DB_UUID_SIZE] = {0}, D2[DB_UUID_SIZE] = {0};
     EXPECT_EQ_RC(db_data_add_from_fd(P, fd, "x/bin", D1), 0);
     lseek(fd, 0, SEEK_SET);
     int rc = db_data_add_from_fd(P, fd, "x/bin", D2);
@@ -626,7 +628,7 @@ int t_reupload_after_delete_new_id(void)
         return -1;
     }
 
-    uint8_t O[DB_ID_SIZE] = {0};
+    uint8_t O[DB_UUID_SIZE] = {0};
     char    eo[DB_EMAIL_MAX_LEN];
     snprintf(eo, sizeof eo, "%s", "o3@x.com");
     db_add_user(eo, O);
@@ -635,13 +637,13 @@ int t_reupload_after_delete_new_id(void)
     int fd = tu_make_blob("./.tmp_blob_reup.dcm", "zz");
     EXPECT_TRUE(fd >= 0);
 
-    uint8_t D1[DB_ID_SIZE] = {0}, D2[DB_ID_SIZE] = {0};
+    uint8_t D1[DB_UUID_SIZE] = {0}, D2[DB_UUID_SIZE] = {0};
     EXPECT_EQ_RC(db_data_add_from_fd(O, fd, "x/bin", D1), 0);
     EXPECT_EQ_RC(db_data_delete(O, D1), 0);
 
     lseek(fd, 0, SEEK_SET);
     EXPECT_EQ_RC(db_data_add_from_fd(O, fd, "x/bin", D2), 0);
-    EXPECT_TRUE(memcmp(D1, D2, DB_ID_SIZE) != 0);
+    EXPECT_TRUE(memcmp(D1, D2, DB_UUID_SIZE) != 0);
 
     close(fd);
     unlink("./.tmp_blob_reup.dcm");
@@ -659,7 +661,7 @@ int t_cannot_share_after_delete(void)
         return -1;
     }
 
-    uint8_t O[DB_ID_SIZE] = {0}, U[DB_ID_SIZE] = {0};
+    uint8_t O[DB_UUID_SIZE] = {0}, U[DB_UUID_SIZE] = {0};
     char    eo[DB_EMAIL_MAX_LEN];
     snprintf(eo, sizeof eo, "%s", "ow@x.com");
     char eu[DB_EMAIL_MAX_LEN];
@@ -671,7 +673,7 @@ int t_cannot_share_after_delete(void)
 
     int fd = tu_make_blob("./.tmp_blob_sad.dcm", "sad");
     EXPECT_TRUE(fd >= 0);
-    uint8_t D[DB_ID_SIZE] = {0};
+    uint8_t D[DB_UUID_SIZE] = {0};
     EXPECT_EQ_RC(db_data_add_from_fd(O, fd, "x/bin", D), 0);
     EXPECT_EQ_RC(db_data_delete(O, D), 0);
 
@@ -693,7 +695,7 @@ int t_share_invalid_email_empty(void)
         return -1;
     }
 
-    uint8_t O[DB_ID_SIZE] = {0};
+    uint8_t O[DB_UUID_SIZE] = {0};
     char    eo[DB_EMAIL_MAX_LEN];
     snprintf(eo, sizeof eo, "%s", "ow2@x.com");
     db_add_user(eo, O);
@@ -701,7 +703,7 @@ int t_share_invalid_email_empty(void)
 
     int fd = tu_make_blob("./.tmp_blob_inv.dcm", "inv");
     EXPECT_TRUE(fd >= 0);
-    uint8_t D[DB_ID_SIZE] = {0};
+    uint8_t D[DB_UUID_SIZE] = {0};
     EXPECT_EQ_RC(db_data_add_from_fd(O, fd, "x/bin", D), 0);
 
     char empty[DB_EMAIL_MAX_LEN] = {0};
@@ -732,7 +734,7 @@ int t_find_by_ids_mixed(void)
         return -1;
     }
 
-    uint8_t A[DB_ID_SIZE] = {0}, B[DB_ID_SIZE] = {0};
+    uint8_t A[DB_UUID_SIZE] = {0}, B[DB_UUID_SIZE] = {0};
     char    ea[DB_EMAIL_MAX_LEN];
     snprintf(ea, sizeof ea, "%s", "fa@x.com");
     char eb[DB_EMAIL_MAX_LEN];
@@ -741,13 +743,13 @@ int t_find_by_ids_mixed(void)
     db_add_user(eb, B);
 
     /* All ok */
-    uint8_t ids_ok[2 * DB_ID_SIZE];
+    uint8_t ids_ok[2 * DB_UUID_SIZE];
     memcpy(ids_ok, A, 16);
     memcpy(ids_ok + 16, B, 16);
     EXPECT_EQ_RC(db_user_find_by_ids(2, ids_ok), 0);
 
     /* One bogus -> -ENOENT */
-    uint8_t ids_bad[2 * DB_ID_SIZE];
+    uint8_t ids_bad[2 * DB_UUID_SIZE];
     memcpy(ids_bad, A, 16);
     memset(ids_bad + 16, 0x77, 16);
     EXPECT_EQ_RC(db_user_find_by_ids(2, ids_bad), -ENOENT);
@@ -766,7 +768,7 @@ int t_data_meta_sane(void)
         return -1;
     }
 
-    uint8_t U[DB_ID_SIZE] = {0};
+    uint8_t U[DB_UUID_SIZE] = {0};
     char    eu[DB_EMAIL_MAX_LEN];
     snprintf(eu, sizeof eu, "%s", "m@x.com");
     db_add_user(eu, U);
@@ -774,15 +776,15 @@ int t_data_meta_sane(void)
 
     int fd = tu_make_blob("./.tmp_meta.dcm", "payload-xyz");
     EXPECT_TRUE(fd >= 0);
-    uint8_t     D[DB_ID_SIZE] = {0};
-    const char *mime          = "application/dicom";
+    uint8_t     D[DB_UUID_SIZE] = {0};
+    const char *mime            = "application/dicom";
     EXPECT_EQ_RC(db_data_add_from_fd(U, fd, mime, D), 0);
 
     DataMeta m = {0};
     EXPECT_EQ_RC(db_data_get_meta(D, &m), 0);
 
     /* Owner matches */
-    EXPECT_TRUE(memcmp(m.owner, U, DB_ID_SIZE) == 0);
+    EXPECT_TRUE(memcmp(m.owner, U, DB_UUID_SIZE) == 0);
     /* MIME echoed */
     EXPECT_TRUE(strncmp(m.mime, mime, sizeof m.mime) == 0);
     /* Size equals file size */
@@ -809,7 +811,7 @@ int t_get_path_invalid_args(void)
         return -1;
     }
 
-    uint8_t dummy[DB_ID_SIZE] = {0};
+    uint8_t dummy[DB_UUID_SIZE] = {0};
     char    path[16];
     EXPECT_EQ_RC(db_data_get_path(NULL, path, sizeof path), -EINVAL);
     EXPECT_EQ_RC(db_data_get_path(dummy, NULL, 128), -EINVAL);
@@ -847,8 +849,9 @@ int t_list_publishers_viewers(void)
         return -1;
     }
 
-    uint8_t A[DB_ID_SIZE] = {0}, B[DB_ID_SIZE] = {0}, Cc[DB_ID_SIZE] = {0};
-    char    ea[DB_EMAIL_MAX_LEN];
+    uint8_t A[DB_UUID_SIZE] = {0}, B[DB_UUID_SIZE] = {0},
+            Cc[DB_UUID_SIZE] = {0};
+    char ea[DB_EMAIL_MAX_LEN];
     snprintf(ea, sizeof ea, "%s", "ra@x.com");
     char eb[DB_EMAIL_MAX_LEN];
     snprintf(eb, sizeof eb, "%s", "rb@x.com");

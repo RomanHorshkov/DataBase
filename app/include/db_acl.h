@@ -2,7 +2,7 @@
 #define DB_ACL_H
 
 #include <stdint.h>
-#include "db_int.h"
+#include "db_internal.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -19,50 +19,50 @@ typedef enum
 
 /* ----------------------------- Grants / Revokes ---------------------------- */
 
-int acl_grant_owner(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
-                    const uint8_t resource[DB_ID_SIZE]);
+int acl_grant_owner(MDB_txn* txn, const uint8_t principal[DB_UUID_SIZE],
+                    const uint8_t resource[DB_UUID_SIZE]);
 
-int acl_grant_share(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
-                    const uint8_t resource[DB_ID_SIZE]);
+int acl_grant_share(MDB_txn* txn, const uint8_t principal[DB_UUID_SIZE],
+                    const uint8_t resource[DB_UUID_SIZE]);
 
-int acl_grant_view(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
-                   const uint8_t resource[DB_ID_SIZE]);
+int acl_grant_view(MDB_txn* txn, const uint8_t principal[DB_UUID_SIZE],
+                   const uint8_t resource[DB_UUID_SIZE]);
 
-int acl_revoke_owner(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
-                     const uint8_t resource[DB_ID_SIZE]);
+int acl_revoke_owner(MDB_txn* txn, const uint8_t principal[DB_UUID_SIZE],
+                     const uint8_t resource[DB_UUID_SIZE]);
 
-int acl_revoke_share(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
-                     const uint8_t resource[DB_ID_SIZE]);
+int acl_revoke_share(MDB_txn* txn, const uint8_t principal[DB_UUID_SIZE],
+                     const uint8_t resource[DB_UUID_SIZE]);
 
-int acl_revoke_view(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
-                    const uint8_t resource[DB_ID_SIZE]);
+int acl_revoke_view(MDB_txn* txn, const uint8_t principal[DB_UUID_SIZE],
+                    const uint8_t resource[DB_UUID_SIZE]);
 
 /* ------------------------------- Checks ----------------------------------- */
 
-int acl_has_owner(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
-                  const uint8_t resource[DB_ID_SIZE]);
+int acl_has_owner(MDB_txn* txn, const uint8_t principal[DB_UUID_SIZE],
+                  const uint8_t resource[DB_UUID_SIZE]);
 
-int acl_has_share(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
-                  const uint8_t resource[DB_ID_SIZE]);
+int acl_has_share(MDB_txn* txn, const uint8_t principal[DB_UUID_SIZE],
+                  const uint8_t resource[DB_UUID_SIZE]);
 
-int acl_has_view(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
-                 const uint8_t resource[DB_ID_SIZE]);
+int acl_has_view(MDB_txn* txn, const uint8_t principal[DB_UUID_SIZE],
+                 const uint8_t resource[DB_UUID_SIZE]);
 
-int acl_has_any(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
-                const uint8_t resource[DB_ID_SIZE]);
+int acl_has_any(MDB_txn* txn, const uint8_t principal[DB_UUID_SIZE],
+                const uint8_t resource[DB_UUID_SIZE]);
 
 /* ---------------------------- Listing (forward) ---------------------------- */
 
 /* Callback for acl_list_data_for_user.
  * Return 0 to continue, non-zero to stop early.
  * 'rel' is one of ACL_REL_* (O/S/V). */
-typedef int (*acl_iter_cb)(const uint8_t resource[DB_ID_SIZE], uint8_t rel,
+typedef int (*acl_iter_cb)(const uint8_t resource[DB_UUID_SIZE], uint8_t rel,
                            void* user);
 
-int acl_list_data_for_user(MDB_txn* txn, const uint8_t principal[DB_ID_SIZE],
+int acl_list_data_for_user(MDB_txn* txn, const uint8_t principal[DB_UUID_SIZE],
                            acl_iter_cb cb, void* user);
 
-int acl_data_destroy(MDB_txn* txn, const uint8_t resource[DB_ID_SIZE]);
+int acl_data_destroy(MDB_txn* txn, const uint8_t resource[DB_UUID_SIZE]);
 
 #ifdef __cplusplus
 }

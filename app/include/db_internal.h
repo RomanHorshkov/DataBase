@@ -1,5 +1,5 @@
 /**
- * @file db_int.h
+ * @file db_internal.h
  * @brief 
  *
  * @author  Roman Horshkov <roman.horshkov@gmail.com>
@@ -28,21 +28,12 @@ extern "C"
 #endif
 
 /****************************************************************************
- * PUBLIC DEFINES
- ****************************************************************************
- */
-
-/* -------------------------- ACL namespaces -------------------------------- */
-
-/* --------------------------- User roles ----------------------------------- */
-#define USER_ROLE_NONE      0u
-#define USER_ROLE_VIEWER    (1u << 0)
-#define USER_ROLE_PUBLISHER (1u << 1)
-
-/****************************************************************************
  * PUBLIC STRUCTURED VARIABLES
  ****************************************************************************
 */
+
+/* DATABASE */
+extern struct DB *DB; /* defined in db_env.c */
 
 /* Handle for the whole store.  All LMDB databases live under <root>/meta,   */
 /* while content-addressed objects live under <root>/objects/sha256/.. .     */
@@ -66,22 +57,67 @@ struct DB
     size_t map_size_bytes_max;
 };
 
-extern struct DB *DB; /* defined in db_env.c */
-
+/* UNISHING STRUCTURES */
+/* user role type */
 typedef uint8_t user_role_t;
 
-typedef struct __attribute__((packed))
+/* value of key-val pairs to put in the dbis */
+typedef size_t (*DB_data_size_fn)(const void *ctx);
+typedef void (*DB_data_write_fn)(void *dst, const void *ctx);
+
+typedef struct
 {
-    uint8_t     ver;              /* 1 byte version for future evolution */
-    user_role_t role;             /* 1 byte role */
-    uint8_t     email_len;        /* 1 byte email length */
-    char email[DB_EMAIL_MAX_LEN]; /* variable-length zero-terminated email */
-} UserPacked;
+    const void      *ctx;   /* db data to insert at value */
+    DB_data_size_fn  size;  /* db's specific size func */
+    DB_data_write_fn write; /* db's specific write memory func */
+} DB_val_t;
+
+/* key descriptor: “just bytes” */
+typedef struct
+{
+    const void *data_ptr;
+    size_t     data_len;
+} DB_key_t;
+
+typedef struct
+{
+    MDB_dbi  dbi;
+    DB_key_t key;
+    DB_val_t val;
+    unsigned flags; /* extras: MDB_NOOVERWRITE | MDB_APPEND */
+
+    /* filled by the prepare/reserve pass */
+    void   *dst;        /* reserved pointer returned by mdb_put */
+    size_t  dst_len;    /* reserved length (for asserts / safety) */
+} DB_operation_t;
+
+/* USER SPECIFIC */
+
+/* DATABASE */
+// extern struct DB_user_id2data_packed *DB_user_id2data_packed; /* defined in db_user.c */
 
 /****************************************************************************
- * PUBLIC FUNCTIONS DECLARATIONS
+ * PUBLIC DEFINES
  ****************************************************************************
-*/
+ */
+
+/* creates a DB_key */
+#define DB_KEY_GEN(p, n)                 \
+    (DB_key_t)                           \
+    {                                    \
+        .data_ptr = (p), .data_len = (n) \
+    }
+
+#define DB_KEY_GEN_ID16(id)       DB_KEY_GEN((id), DB_UUID_SIZE)
+#define DB_KEY_GEN_MAIL(email, n) DB_KEY_GEN((email), (n))
+
+/* USER SPECIFIC */
+/* --------------------------- User roles ----------------------------------- */
+#define USER_ROLE_NONE            0u
+#define USER_ROLE_VIEWER          (1u << 0)
+#define USER_ROLE_PUBLISHER       (1u << 1)
+
+/* PUBLIC */
 int db_map_mdb_err(int mdb_rc);
 int db_env_mapsize_expand(void);
 

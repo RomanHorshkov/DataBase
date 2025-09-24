@@ -297,7 +297,7 @@ static int tl_upload_mixed_sizes_and_share_details(void)
     }
 
     /* owner (idx 0) */
-    uint8_t owner[DB_ID_SIZE] = {0};
+    uint8_t owner[DB_UUID_SIZE] = {0};
     if(db_user_find_by_email(emails, owner) != 0)
     {
         free(emails);
@@ -332,7 +332,7 @@ static int tl_upload_mixed_sizes_and_share_details(void)
     for(int bi = 0; bi < 3; ++bi)
     {
         struct Bucket* b = buckets[bi];
-        b->dids          = (uint8_t*)calloc(b->n, DB_ID_SIZE);
+        b->dids          = (uint8_t*)calloc(b->n, DB_UUID_SIZE);
         b->ok            = (uint8_t*)calloc(b->n, 1);
         if(!b->dids || !b->ok)
         {
@@ -357,7 +357,7 @@ static int tl_upload_mixed_sizes_and_share_details(void)
                 continue;
             }
             int rc = db_data_add_from_fd(owner, fd, "application/octet-stream",
-                                         b->dids + i * DB_ID_SIZE);
+                                         b->dids + i * DB_UUID_SIZE);
             close(fd);
             unlink(p);
             if(rc == 0)
@@ -431,7 +431,7 @@ static int tl_upload_mixed_sizes_and_share_details(void)
         for(size_t i = 0; i < b->n; i++)
         {
             if(!b->ok[i]) continue; /* skip failed uploads */
-            const uint8_t* did = b->dids + i * DB_ID_SIZE;
+            const uint8_t* did = b->dids + i * DB_UUID_SIZE;
             for(size_t s = 0; s < SHARES_PER_OBJ; s++)
             {
                 size_t uidx;

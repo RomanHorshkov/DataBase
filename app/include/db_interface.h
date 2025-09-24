@@ -21,7 +21,7 @@ extern "C"
  */
 
 /* ----------------------- Packed DB records -------------------------------- */
-#define DB_ID_SIZE       16  /* UUID bytes sizes 128 bits */
+#define DB_UUID_SIZE     16  /* UUID bytes sizes 128 bits */
 #define DB_EMAIL_MAX_LEN 128 /* Maximum length for email strings */
 #define DB_VER           0
 
@@ -32,12 +32,12 @@ extern "C"
 
 typedef struct __attribute__((packed))
 {
-    uint8_t  ver;               /* version for future evolution */
-    uint8_t  sha[32];           /* SHA-256 of stored object */
-    char     mime[32];          /* MIME type */
-    uint64_t size;              /* total bytes */
-    uint64_t created_at;        /* epoch seconds */
-    uint8_t  owner[DB_ID_SIZE]; /* uploader id */
+    uint8_t  ver;                 /* version for future evolution */
+    uint8_t  sha[32];             /* SHA-256 of stored object */
+    char     mime[32];            /* MIME type */
+    uint64_t size;                /* total bytes */
+    uint64_t created_at;          /* epoch seconds */
+    uint8_t  owner[DB_UUID_SIZE]; /* uploader id */
 } DataMeta;
 
 /****************************************************************************
@@ -59,14 +59,15 @@ int db_open(const char* root_dir, size_t mapsize_bytes);
 void db_close(void);
 
 /* ------------------------------ Users ----------------------------------- */
-
+int auth_register_new(const char *email_in, /* const char *pwd_in, */
+                      uint8_t *out_user_id);
 /**
  * @brief Insert a user if not already present. If present, copy id into out_id.
  * @param email User email.
  * @param out_id Output user ID.
  * @return 0 on insertion, -EEXIST if already existed, -EINVAL bad input, -EIO DB error.
  */
-int db_add_user(char email[DB_EMAIL_MAX_LEN], uint8_t out_id[DB_ID_SIZE]);
+int db_add_user(char email[DB_EMAIL_MAX_LEN], uint8_t out_id[DB_UUID_SIZE]);
 
 /**
  * @brief Insert a batch of users. If any present, fail.
@@ -86,7 +87,7 @@ int db_add_users(size_t n_users, char email_flat[n_users * DB_EMAIL_MAX_LEN]);
  * @param out_email Output email.
  * @return 0 on success, -ENOENT if not found, -EIO on DB error.
  */
-int db_user_find_by_id(const uint8_t id[DB_ID_SIZE],
+int db_user_find_by_id(const uint8_t id[DB_UUID_SIZE],
                        char          out_email[DB_EMAIL_MAX_LEN]);
 
 /**
@@ -96,7 +97,7 @@ int db_user_find_by_id(const uint8_t id[DB_ID_SIZE],
  * @return 0 on success, -ENOENT if not found, -EIO on DB error.
  */
 int db_user_find_by_ids(size_t        n_users,
-                        const uint8_t ids_flat[n_users * DB_ID_SIZE]);
+                        const uint8_t ids_flat[n_users * DB_UUID_SIZE]);
 
 /**
  * @brief Look up a user id by email.
@@ -105,7 +106,7 @@ int db_user_find_by_ids(size_t        n_users,
  * @return 0 on success, -ENOENT if not found, -EIO on DB error.
  */
 int db_user_find_by_email(const char email[DB_EMAIL_MAX_LEN],
-                          uint8_t    out_id[DB_ID_SIZE]);
+                          uint8_t    out_id[DB_UUID_SIZE]);
 
 /**
  * @brief Share data with a user identified by email (grants 'U' presence).
@@ -114,8 +115,8 @@ int db_user_find_by_email(const char email[DB_EMAIL_MAX_LEN],
  * @param email Recipient email.
  * @return 0 on success, -ENOENT if user or data missing, -EIO on DB error, -EPERM on ACL.
  */
-int db_user_share_data_with_user_email(const uint8_t owner[DB_ID_SIZE],
-                                       const uint8_t data_id[DB_ID_SIZE],
+int db_user_share_data_with_user_email(const uint8_t owner[DB_UUID_SIZE],
+                                       const uint8_t data_id[DB_UUID_SIZE],
                                        const char    email[DB_EMAIL_MAX_LEN]);
 
 /**
@@ -123,14 +124,14 @@ int db_user_share_data_with_user_email(const uint8_t owner[DB_ID_SIZE],
  * @param userId User ID.
  * @return 0 on success, -ENOENT if user missing, -EINVAL if bad role, -EIO on DB error.
  */
-int db_user_set_role_viewer(uint8_t userId[DB_ID_SIZE]);
+int db_user_set_role_viewer(uint8_t userId[DB_UUID_SIZE]);
 
 /**
  * @brief Update a user's role in the DB to publisher.
  * @param userId User ID.
  * @return 0 on success, -ENOENT if user missing, -EINVAL if bad role, -EIO on DB error.
  */
-int db_user_set_role_publisher(uint8_t userId[DB_ID_SIZE]);
+int db_user_set_role_publisher(uint8_t userId[DB_UUID_SIZE]);
 
 /**
  * @brief List all users.
@@ -165,7 +166,7 @@ int db_user_list_viewers(uint8_t* out_ids, size_t* inout_count_max);
  * @param out_sz Output buffer size.
  * @return 0 on success, -ENOENT if meta missing, -EINVAL bad args, -EIO on path error.
  */
-int db_data_get_path(uint8_t img_id[DB_ID_SIZE], char* out_path,
+int db_data_get_path(uint8_t img_id[DB_UUID_SIZE], char* out_path,
                      unsigned long out_sz);
 
 /**
@@ -175,8 +176,8 @@ int db_data_get_path(uint8_t img_id[DB_ID_SIZE], char* out_path,
  * @param data_id Data to delete.
  * @return 0 on success, -EPERM if actor not owner, -ENOENT if missing, -EIO otherwise.
  */
-int db_data_delete(const uint8_t actor[DB_ID_SIZE],
-                   const uint8_t data_id[DB_ID_SIZE]);
+int db_data_delete(const uint8_t actor[DB_UUID_SIZE],
+                   const uint8_t data_id[DB_UUID_SIZE]);
 
 /**
  * @brief Ingest a blob from 'src_fd', computing SHA-256 while streaming it.
@@ -188,17 +189,17 @@ int db_data_delete(const uint8_t actor[DB_ID_SIZE],
  * @return 0 on success, -EEXIST if content existed (id returned), -EPERM if not publisher,
  *         -ENOENT if owner not found, -EINVAL bad args, -EIO on error.
  */
-int db_data_add_from_fd(uint8_t owner[DB_ID_SIZE], int src_fd, const char* mime,
-                        uint8_t out_data_id[DB_ID_SIZE]);
+int db_data_add_from_fd(uint8_t owner[DB_UUID_SIZE], int src_fd,
+                        const char* mime, uint8_t out_data_id[DB_UUID_SIZE]);
 
-int db_data_get_meta(uint8_t data_id[DB_ID_SIZE], DataMeta* out_meta);
-int db_data_get_path(uint8_t data_id[DB_ID_SIZE], char* out_path,
+int db_data_get_meta(uint8_t data_id[DB_UUID_SIZE], DataMeta* out_meta);
+int db_data_get_path(uint8_t data_id[DB_UUID_SIZE], char* out_path,
                      unsigned long out_sz);
 
 /* ACL helpers and operations (reserved for future use) */
 /*
- * int db_revoke_data_from_user_email(uint8_t owner[DB_ID_SIZE], uint8_t data_id[DB_ID_SIZE], const char email[DB_EMAIL_MAX_LEN]);
- * int db_revoke_data_from_user_id(uint8_t owner[DB_ID_SIZE], uint8_t data_id[DB_ID_SIZE], const uint8_t user_id[DB_ID_SIZE]);
+ * int db_revoke_data_from_user_email(uint8_t owner[DB_UUID_SIZE], uint8_t data_id[DB_UUID_SIZE], const char email[DB_EMAIL_MAX_LEN]);
+ * int db_revoke_data_from_user_id(uint8_t owner[DB_UUID_SIZE], uint8_t data_id[DB_UUID_SIZE], const uint8_t user_id[DB_UUID_SIZE]);
  */
 
 /* --------------------------- LMDB ENV ------------------------------- */
