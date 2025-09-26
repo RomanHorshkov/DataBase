@@ -1,3 +1,4 @@
+
 #include "auth.h"
 #include <sodium.h>
 #include <string.h>
@@ -20,14 +21,13 @@ static int user_create_tx(DB* db, Tx* tx, const char* email, u8 elen,
                           const char* pw, uuid16_t* out_id)
 {
     /* Check not exists */
-    uuid16_t existing;
-    int      rc = mdb_get(tx->txn, db_dbi(db, DBI_EMAIL2ID),
-                          &(MDB_val){.mv_size = elen, .mv_data = (void*)email},
-                          &(MDB_val){0});
-    if(rc == MDB_SUCCESS) return -EEXIST; /* already present */
+    MDB_val k_email = {.mv_size = elen, .mv_data = (void*)email};
+    MDB_val v_id;
+    int     mrc = mdb_get(tx->txn, db_dbi(db, DBI_EMAIL2ID), &k_email, &v_id);
+    if(mrc == MDB_SUCCESS) return -EEXIST; /* already present */
 
     uuid16_t uid;
-    uuid_gen(&uid);
+    if(uuid_gen(&uid) != 0) return -EIO;
 
     /* Hash password */
     char hash[crypto_pwhash_STRBYTES];
@@ -46,10 +46,9 @@ static int user_create_tx(DB* db, Tx* tx, const char* email, u8 elen,
     strncpy(rec.pw_hash, hash, sizeof rec.pw_hash - 1);
 
     /* Put email→id and user */
-    MDB_val k_email = {.mv_size = elen, .mv_data = (void*)email};
-    MDB_val v_id    = {.mv_size = DB_ID_SIZE, .mv_data = (void*)uid.b};
-    int     mrc = mdb_put(tx->txn, db_dbi(db, DBI_EMAIL2ID), &k_email, &v_id,
-                          MDB_NOOVERWRITE);
+    MDB_val v_uid = {.mv_size = DB_ID_SIZE, .mv_data = (void*)uid.b};
+    mrc           = mdb_put(tx->txn, db_dbi(db, DBI_EMAIL2ID), &k_email, &v_uid,
+                            MDB_NOOVERWRITE);
     if(mrc != MDB_SUCCESS) return map_mdb_err(mrc);
 
     MDB_val k_uid = {.mv_size = DB_ID_SIZE, .mv_data = (void*)uid.b};
@@ -175,7 +174,7 @@ static int ensure_user_tx(DB* db, Tx* tx, const char* email, u8 elen,
         memcpy(uid->b, v.mv_data, DB_ID_SIZE);
         return 0;
     }
-    /* create with random password and force set pw flow (here: set hash to invalid) */
+    /* create with temp password */
     const char* temp_pw = "!#TEMP#";
     int         rc      = user_create_tx(db, tx, email, elen, temp_pw, uid);
     return rc;

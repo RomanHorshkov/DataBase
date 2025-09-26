@@ -1,4 +1,36 @@
+
 #include "kv_core.h"
+#include <string.h>
+#include "codec.h"
+
+/* Registry from schemas.def (enum is already defined in the header) */
+#define DBI_EXPAND_DESC(id, name, kenc, kdec, kpr, venc, vdec, vpr, cmp, \
+                        flags)                                           \
+    [DBI_##id] =                                                         \
+        (dbi_desc_t){name, kenc, kdec, kpr, venc, vdec, vpr, cmp, flags, 0},
+static dbi_desc_t REGISTRY[DBI_COUNT] = {
+#define _(id, name, kenc, kdec, kpr, venc, vdec, vpr, cmp, flags) \
+    DBI_EXPAND_DESC(id, name, kenc, kdec, kpr, venc, vdec, vpr, cmp, flags)
+#include "../include/schemas.def"
+#undef _
+};
+#undef DBI_EXPAND_DESC
+
+int map_mdb_err(int mrc)
+{
+    switch(mrc)
+    {
+        case MDB_SUCCESS:
+            return 0;
+        case MDB_NOTFOUND:
+            return -ENOENT;
+        case EACCES:
+            return -EACCES;
+        default:
+            return -EIO;
+    }
+}
+
 int db_open(DB* db, const char* root, size_t mapsize)
 {
     memset(db, 0, sizeof *db);
@@ -218,7 +250,7 @@ int kv_dump_all(DB* db, FILE* out)
 {
     for(int i = 0; i < DBI_COUNT; i++)
     {
-        fprintf(out, "# %s\n", db->dbis[i].name);
+        fprintf(out, "# %s", db->dbis[i].name);
         kv_dump(db, (DBI_ID)i, out);
     }
     return 0;

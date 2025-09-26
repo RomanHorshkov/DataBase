@@ -48,26 +48,8 @@ typedef struct
     MDB_dbi      dbi;
 } dbi_desc_t;
 
-/* Expands from schemas.def */
+/* === DBI enum expands from schemas.def (define enum FIRST!) === */
 #define DBI_EXPAND_ENUM(id, name, ...) DBI_##id,
-#define DBI_EXPAND_DESC(id, name, kenc, kdec, kpr, venc, vdec, vpr, cmp, \
-                        flags)                                           \
-    [DBI_##id] = {name, kenc, kdec, kpr, venc, vdec, vpr, cmp, flags, 0},
-
-/* Public DB handle */
-typedef struct
-{
-    char       root[1024];
-    MDB_env*   env;
-    dbi_desc_t dbis[
-#define _(id, name, ...) DBI_EXPAND_ENUM(id, name)
-#include "schemas.def"
-#undef _
-        0 /* dummy to allow past-the-end index calc; replaced below */
-    ];
-} DB;
-
-/* Proper enum & DBI_COUNT */
 typedef enum
 {
 #define _(id, name, ...) DBI_EXPAND_ENUM(id, name)
@@ -75,9 +57,9 @@ typedef enum
 #undef _
     DBI_COUNT
 } DBI_ID;
+#undef DBI_EXPAND_ENUM
 
-/* Re-declare dbis array size now that DBI_COUNT is known */
-#undef DB
+/* Public DB handle (single definition) */
 typedef struct
 {
     char       root[1024];
@@ -102,4 +84,19 @@ int kv_scan(DB* db, DBI_ID id, const void* start_key_obj,
 
 int kv_dump(DB* db, DBI_ID id, FILE* out);
 int kv_dump_all(DB* db, FILE* out);
+
+/* ===== Transaction helpers (for multi-step ops) ===== */
+typedef struct
+{
+    MDB_txn* txn;
+} Tx; /* <-- DEFINES Tx */
+int  tx_begin(DB* db, int rdonly, Tx* out);
+int  tx_commit(Tx* t);
+void tx_abort(Tx* t);
+
+/* Raw LMDB access (rarely needed; keep private where possible) */
+MDB_env* db_env(DB* db);
+MDB_dbi  db_dbi(DB* db, DBI_ID id);
+
+/* Error mapping */
 int map_mdb_err(int mrc);

@@ -29,6 +29,18 @@ else
   endif
 endif
 
+# --- Sodium detection (required) ---
+ifeq ($(PKGCONFIG),)
+  SODIUM_CFLAGS :=
+  SODIUM_LIBS   := -lsodium
+else
+  SODIUM_CFLAGS := $(shell pkg-config --cflags libsodium 2>/dev/null)
+  SODIUM_LIBS   := $(shell pkg-config --libs   libsodium 2>/dev/null)
+  ifeq ($(SODIUM_LIBS),)
+    SODIUM_LIBS := -lsodium
+  endif
+endif
+
 # --- Paths ---
 APP_NAME     := db_lmdb_demo
 TEST_NAME    := db_tests
@@ -77,7 +89,7 @@ INC_TEST_DIRS := $(shell [ -d $(TEST_INC) ] && find $(TEST_INC) -type d 2>/dev/n
 
 CPPFLAGS := -D_GNU_SOURCE \
             $(addprefix -I,$(INC_APP_DIRS) $(INC_TEST_DIRS)) \
-            $(OPENSSL_CFLAGS) $(LMDB_CFLAGS) # $(SODIUM_CFLAGS)
+            $(OPENSSL_CFLAGS) $(LMDB_CFLAGS) $(SODIUM_CFLAGS)
 
 CSTD     := -std=c11
 WARN     := -Wall -Wextra -Wshadow -Wconversion -Wpointer-arith -Wcast-qual -Wwrite-strings
@@ -102,7 +114,7 @@ else
     $(error Unknown MODE '$(MODE)'. Use: release, debug, asan, ubsan)
 endif
 
-LDLIBS := $(OPENSSL_LIBS) $(LMDB_LIBS) # $(SODIUM_LIBS)
+LDLIBS := $(OPENSSL_LIBS) $(LMDB_LIBS) $(SODIUM_LIBS)
 
 # ------------------------------------------------------------
 # Source discovery

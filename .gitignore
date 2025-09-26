@@ -9,5 +9,5 @@
 #ignore any build file
 /build
 
-/nonono
-/nonono*
+/.nonono
+/.nonono*
