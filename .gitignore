@@ -8,3 +8,6 @@
 .test*
 #ignore any build file
 /build
+
+/nonono
+/nonono*

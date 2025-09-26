@@ -20,6 +20,10 @@
         "libgen.h": "c",
         "unistd.h": "c",
         "types.h": "c",
-        "stat.h": "c"
+        "stat.h": "c",
+        "db_internal.h": "c",
+        "auth_interface.h": "c",
+        "cstdint": "c",
+        "*.def": "cpp"
     }
 }

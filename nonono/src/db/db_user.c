@@ -7,8 +7,8 @@
  * (c) 2025
  */
 
+#include "db_user.h"
 #include "db_acl.h"
-#include "db_internal.h"
 #include "utils_interface.h"
 
 #include "ctype.h"
@@ -48,9 +48,14 @@ typedef struct __attribute__((packed))
  ****************************************************************************
  */
 
+static int db_user_register_new_ops(DB_operation_t *ops, int *n_ops,
+                                    uint8_t email_len, const char *email,
+                                    const uint8_t *user_id
+                                    /*, const void *pwrec, size_t pwrec_sz*/);
+
 static size_t db_user_id2data_data_size(const void *p)
 {
-    return 3u + ((DB_user_id2data_packed *)p)->email_len;
+    return 3u + (size_t)((DB_user_id2data_packed *)p)->email_len;
 }
 
 static void db_user_id2data_data_write(void *dst, void *src)
@@ -105,132 +110,37 @@ static inline int cmp_id16(const void *a, const void *b)
     return memcmp(a, b, DB_UUID_SIZE);
 }
 
+/****************************************************************************
+ * PUBLIC FUNCTIONS DEFINITIONS
+ ****************************************************************************
+ */
 
-static int db_put_reserve(MDB_txn *txn, const DB_operation_t *operations,
-                          uint8_t n_operations, uint8_t *failed_op)
+int db_user_register_new(uint8_t email_len, const char *email,
+                         const uint8_t *user_id
+                         /*, const void *pwrec, size_t pwrec_sz*/)
 {
-    if(!txn || !operations || n_operations <= 0) return -EINVAL;
+    if(!email || !user_id /* || !pwrec*/) return -EINVAL;
 
-    /* getting data loop */
-    for(uint8_t i = 0; i < n_operations; ++i)
-    {
-        DB_operation_t *operation = &operations[i];
+    /* Prepare the operations data */
+    DB_operation_t *ops   = NULL;
+    int             n_ops = 0;
 
-        /* Check operation params */
-        if(!operation->val.ctx || !operation->val.size || !operation->val.write)
-            return -EINVAL;
-
-        MDB_val k = {.mv_size = operation->key.data_len,
-                     .mv_data = (void *)operation->key.data_ptr};
-        MDB_val v = {.mv_size = operation->val.size(operation->val.ctx),
-                     .mv_data = NULL};
-
-        int rc = mdb_put(txn, operation->dbi, &k, &v,
-                         MDB_RESERVE | operation->flags);
-        if(rc != MDB_SUCCESS)
-        {
-            printf("Nok mdb_put\n");
-            if(failed_op) *failed_op = i;
-            return rc;
-        }
-
-        /* remember where to write later */
-        operation->dst     = v.mv_data;
-        operation->dst_len = v.mv_size;
-    }
-
-    return MDB_SUCCESS;
-}
-
-static int db_put_write_reserved(DB_operation_t *operations,
-                                 uint8_t         n_operations)
-{
-    if(!operations || n_operations <= 0) return -EINVAL;
-
-    for(size_t i = 0; i < n_operations; ++i)
-    {
-        /* must be set by reserve pass */
-        if(!operations[i].dst) return -EFAULT;
-
-        operations[i].val.write(operations[i].dst, operations[i].val.ctx);
-    }
-    return MDB_SUCCESS;
-}
-
-static int db_register_new(MDB_txn *txn, uint8_t email_len, const char *email,
-                           const uint8_t *user_id
-                           /*, const void *pwrec, size_t pwrec_sz*/)
-{
-    if(!txn || !email || !user_id /* || !pwrec*/) return -EINVAL;
-
-    int N_OPERATIONS = 2;
-
-    /* build the operations to be executed on the whole db
-    for adding a new user:
-    insert new user email and verify not exists.
-    insert new user data
-    TO DO: insert new user pwd
-    */
-    DB_operation_t ops[N_OPERATIONS];
-
-    printf("ok here_1\n");
-    ops[0].dbi = DB->db_user_id2data;
-    ops[0].key = DB_KEY_GEN_ID16(user_id);
-    ops[0].val = DB_ENC_USER_ID2DATA(DB_VER, USER_ROLE_NONE, email_len, email);
-    ops[0].flags = MDB_NOOVERWRITE | MDB_APPEND;
-
-    printf("ok here_2\n");
-    /* 2) email -> id */
-    ops[1].dbi   = DB->db_user_mail2id;
-    ops[1].key   = DB_KEY_GEN_MAIL(email, email_len);
-    ops[1].val   = DB_ENC_USER_MAIL2ID(user_id);
-    ops[1].flags = MDB_NOOVERWRITE;
-    printf("ok here_3\n");
-
-    // /* 3) id -> password */
-    // ops[2].dbi   = DB->db_user_id2pw;
-    // ops[2].key   = DB_KEY_ID16(user_id);
-    // ops[2].val   = DB_ENC_SPAN(pwrec, pwrec_sz);
-    // ops[2].flags = MDB_NOOVERWRITE;
-
-    size_t failed = (size_t)-1;
-    int rc = db_put_reserve(txn, ops, N_OPERATIONS, &failed);
-    if(rc != MDB_SUCCESS)
-    {
-        printf("Nok db_put_reserve\n");
-        return rc;
-    }
-    printf("ok db_put_reserve\n");
-
-    return db_put_write_reserved(ops, N_OPERATIONS);
-}
-
-int auth_register_new(const char *email_in, /* const char *pwd_in, */
-                      uint8_t *out_user_id)
-{
-    if(!email_in || email_in[0] == '\0') return -EINVAL;
-
-    uint8_t elen = 0;
-    if(sanitize_email(email_in, DB_EMAIL_MAX_LEN, &elen) != 0) return -EINVAL;
-    printf("ok sanitize\n");
-
-    uint8_t user_id[DB_UUID_SIZE];
-    uuid_v7(user_id);
-
-    // uint8_t pwrec[PWREC_SIZE];
-    // if(password_hash(pwd_in, pwrec) != 0) return -EIO;
+    int rc = db_user_register_new_ops(ops, &n_ops, email_len, email, &user_id
+                                      /*, const void *pwrec, size_t pwrec_sz*/);
 
 retry:
-    MDB_txn *txn = NULL;
-    int      rc  = mdb_txn_begin(DB->env, NULL, 0, &txn);
-    if(rc != MDB_SUCCESS) return db_map_mdb_err(rc);
-    printf("ok mdb_txn_begin\n");
+    size_t failed = (size_t)-1;
 
-    rc =
-        db_register_new(txn, elen, email_in, user_id /*, pwrec, sizeof pwrec*/);
+    /* Initialize the transaction */
+    MDB_txn *txn = NULL;
+
+    rc = mdb_txn_begin(DB->env, NULL, 0, &txn);
+    if(rc != MDB_SUCCESS) return db_map_mdb_err(rc);
+
+    /* Reserve the space in DB for later writing */
+    int rc = db_put_reserve(txn, ops, n_ops, &failed);
     if(rc != MDB_SUCCESS)
     {
-        printf("Nok db_register_new\n");
         mdb_txn_abort(txn);
         if(rc == MDB_MAP_FULL)
         {
@@ -241,8 +151,15 @@ retry:
 
         return db_map_mdb_err(rc);
     }
-        printf("ok db_register_new\n");
 
+    /* write the reserved space */
+    rc = db_put_write_reserved(ops, n_ops);
+    if(rc != 0)
+    {
+        return rc;
+    }
+
+    /* Commit the transaction */
     rc = mdb_txn_commit(txn);
     if(rc == MDB_MAP_FULL)
     {
@@ -252,15 +169,9 @@ retry:
         goto retry;
     }
     if(rc != MDB_SUCCESS) return db_map_mdb_err(rc);
-    printf("ok mdb_txn_commit\n");
-    if(out_user_id) memcpy(out_user_id, user_id, DB_UUID_SIZE);
-    return 0;
-}
 
-/****************************************************************************
- * PUBLIC FUNCTIONS DEFINITIONS
- ****************************************************************************
- */
+    return rc;
+}
 
 /** Look up a user by id and optionally return email. */
 int db_user_find_by_id(const uint8_t id[DB_UUID_SIZE],
@@ -645,7 +556,6 @@ retry_chunk:
 int db_user_list_all(uint8_t *out_ids, size_t *inout_count_max)
 {
     if(!inout_count_max || !out_ids) return -EINVAL;
-    size_t n = 0;
 
     MDB_txn *txn;
     if(mdb_txn_begin(DB->env, NULL, MDB_RDONLY, &txn) != MDB_SUCCESS)
@@ -657,6 +567,7 @@ int db_user_list_all(uint8_t *out_ids, size_t *inout_count_max)
         return -EIO;
     }
 
+    size_t  n = 0;
     MDB_val k = {0}, v = {0};
     for(int rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST); rc == MDB_SUCCESS;
         rc     = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
@@ -875,6 +786,49 @@ int db_user_get_and_check_mem(const MDB_val *v, uint8_t *out_ver,
  * PRIVATE FUNCTIONS DEFINITIONS
  ****************************************************************************
  */
+
+static int db_user_register_new_ops(DB_operation_t *ops, int *n_ops,
+                                    uint8_t email_len, const char *email,
+                                    const uint8_t *user_id
+                                    /*, const void *pwrec, size_t pwrec_sz*/)
+{
+    /* build the operations to be executed on the whole db
+    for registering a new user:
+    insert new user email and verify not exists.
+    insert new user data
+    TO DO: insert new user pwd
+    */
+
+    int N_OPERATIONS = 2;
+    ops = (DB_operation_t *)malloc(N_OPERATIONS * sizeof(DB_operation_t));
+
+    if(!ops)
+    {
+        return -EINVAL;
+    }
+
+    /* ID -> Data, uui7 ID always increasing so APPEND */
+    ops[0].dbi = DB->db_user_id2data;
+    ops[0].key = DB_KEY_GEN_ID16(user_id);
+    ops[0].val = DB_ENC_USER_ID2DATA(DB_VER, USER_ROLE_NONE, email_len, email);
+    ops[0].flags = MDB_NOOVERWRITE | MDB_APPEND;
+
+    /* 2) email -> id */
+    ops[1].dbi   = DB->db_user_mail2id;
+    ops[1].key   = DB_KEY_GEN_MAIL(email, email_len);
+    ops[1].val   = DB_ENC_USER_MAIL2ID(user_id);
+    ops[1].flags = MDB_NOOVERWRITE;
+
+    // /* 3) id -> password */
+    // ops[2].dbi   = DB->db_user_id2pw;
+    // ops[2].key   = DB_KEY_ID16(user_id);
+    // ops[2].val   = DB_ENC_SPAN(pwrec, pwrec_sz);
+    // ops[2].flags = MDB_NOOVERWRITE;
+
+    *n_ops = N_OPERATIONS;
+    return 0;
+}
+
 static int db_user_set_role(uint8_t userId[DB_UUID_SIZE], user_role_t role)
 {
     if(role != USER_ROLE_VIEWER && role != USER_ROLE_PUBLISHER &&

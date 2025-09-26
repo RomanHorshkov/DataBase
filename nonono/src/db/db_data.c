@@ -23,7 +23,16 @@
  * PRIVATE STUCTURED VARIABLES
  ****************************************************************************
  */
-/* None */
+
+typedef struct __attribute__((packed))
+{
+    uint8_t  ver;                 /* version for future evolution */
+    uint8_t  sha[32];             /* SHA-256 of stored object */
+    char     mime[32];            /* MIME type */
+    uint64_t size;                /* total bytes */
+    uint64_t created_at;          /* epoch seconds */
+    uint8_t  owner[DB_UUID_SIZE]; /* uploader id */
+} DataMeta;
 
 /****************************************************************************
  * PRIVATE VARIABLES

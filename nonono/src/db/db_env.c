@@ -8,7 +8,6 @@
  */
 
 #include "db_internal.h"
-#include "fsutil.h"
 
 /****************************************************************************
  * PRIVATE DEFINES

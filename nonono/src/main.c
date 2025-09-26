@@ -109,7 +109,6 @@ int main(void)
             UE[DB_UUID_SIZE] = {0}, UF[DB_UUID_SIZE] = {0},
             UG[DB_UUID_SIZE] = {0}, UH[DB_UUID_SIZE] = {0};
 
-
     // auth_register_new(alice, UA)
 
     CHECK(auth_register_new(alice, UA));

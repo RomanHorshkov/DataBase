@@ -1,0 +1,23 @@
+/* id, name, key_enc, key_dec, key_prn, val_enc, val_dec, val_prn, cmp, flags */
+/* USER: key=uuid16, value=user_rec */
+_(USER, "user", enc_uuid, dec_uuid, pr_uuid, enc_user_rec, dec_user_rec, pr_user_rec, NULL, 0)
+
+
+/* EMAIL2ID: key=email bytes, value=uuid16 */
+_(EMAIL2ID, "user_email2id", enc_email, NULL, pr_email, enc_uuid, dec_uuid, pr_uuid, NULL, 0)
+
+
+/* DATA_META: key=uuid16(data_id), value=data_meta_rec */
+_(DATA_META, "data_meta", enc_uuid, dec_uuid, pr_uuid, enc_data_meta, dec_data_meta, pr_data_meta, NULL, 0)
+
+
+/* SHA2DATA: key=sha256, value=uuid16(data_id) */
+_(SHA2DATA, "sha2data", enc_sha256, dec_sha256, pr_sha256, enc_uuid, dec_uuid, pr_uuid, NULL, 0)
+
+
+/* ACL_FWD: key=principal(16)|rtype(1)|resource(16), value=1 */
+_(ACL_FWD, "acl_fwd", enc_acl_fwd_k, NULL, pr_acl_fwd_k, enc_u8_one, NULL, pr_u8_one, NULL, 0)
+
+
+/* ACL_REV: key=resource(16)|rtype(1)|principal(16), value=1 */
+_(ACL_REV, "acl_rev", enc_acl_rev_k, NULL, pr_acl_rev_k, enc_u8_one, NULL, pr_u8_one, NULL, 0)

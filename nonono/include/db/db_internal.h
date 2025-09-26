@@ -10,10 +10,7 @@
 #ifndef DB_INTERNAL_H
 #define DB_INTERNAL_H
 
-#include <errno.h>
 #include <lmdb.h>
-#include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -76,7 +73,7 @@ typedef struct
 typedef struct
 {
     const void *data_ptr;
-    size_t     data_len;
+    size_t      data_len;
 } DB_key_t;
 
 typedef struct
@@ -87,8 +84,8 @@ typedef struct
     unsigned flags; /* extras: MDB_NOOVERWRITE | MDB_APPEND */
 
     /* filled by the prepare/reserve pass */
-    void   *dst;        /* reserved pointer returned by mdb_put */
-    size_t  dst_len;    /* reserved length (for asserts / safety) */
+    void  *dst;     /* reserved pointer returned by mdb_put */
+    size_t dst_len; /* reserved length (for asserts / safety) */
 } DB_operation_t;
 
 /* USER SPECIFIC */
@@ -118,6 +115,12 @@ typedef struct
 #define USER_ROLE_PUBLISHER       (1u << 1)
 
 /* PUBLIC */
+
+int db_put_reserve(MDB_txn *txn, const DB_operation_t *operations,
+                   uint8_t n_operations, uint8_t *failed_op);
+
+int db_put_write_reserved(DB_operation_t *operations, uint8_t n_operations);
+
 int db_map_mdb_err(int mdb_rc);
 int db_env_mapsize_expand(void);
 

@@ -1,9 +1,8 @@
 #include "utils_interface.h"
 
+#include <ctype.h> /* isspace */
 #include <errno.h>
 #include <stddef.h>
-#include <ctype.h> /* isspace */
-
 
 static inline int is_local_allowed(unsigned char c)
 {

@@ -10,6 +10,12 @@
 #ifndef DB_INTERFACE_H
 #define DB_INTERFACE_H
 
+#include <errno.h>
+#include <stddef.h> /* size_t */
+#include <stdint.h>
+
+#include "db_user.h" /* user har it's own interface */
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -30,16 +36,6 @@ extern "C"
  ****************************************************************************
 */
 
-typedef struct __attribute__((packed))
-{
-    uint8_t  ver;                 /* version for future evolution */
-    uint8_t  sha[32];             /* SHA-256 of stored object */
-    char     mime[32];            /* MIME type */
-    uint64_t size;                /* total bytes */
-    uint64_t created_at;          /* epoch seconds */
-    uint8_t  owner[DB_UUID_SIZE]; /* uploader id */
-} DataMeta;
-
 /****************************************************************************
  * PUBLIC FUNCTIONS DECLARATIONS
  ****************************************************************************
@@ -59,8 +55,9 @@ int db_open(const char* root_dir, size_t mapsize_bytes);
 void db_close(void);
 
 /* ------------------------------ Users ----------------------------------- */
-int auth_register_new(const char *email_in, /* const char *pwd_in, */
-                      uint8_t *out_user_id);
+
+int db_register_new(uint8_t email_len, const char* email, const uint8_t* user_id
+                    /*, const void *pwrec, size_t pwrec_sz*/);
 /**
  * @brief Insert a user if not already present. If present, copy id into out_id.
  * @param email User email.
