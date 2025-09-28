@@ -109,8 +109,8 @@ int db_open(const char* root_dir, size_t mapsize_bytes)
     snprintf(metadir, sizeof metadir, "%s/meta", root_dir);
     if(db_env_setup_and_open(metadir, mapsize_bytes) != MDB_SUCCESS)
     {
-        fprintf(stderr, "%s:%d db open db_env_setup_and_open\n",
-                __FILE__, __LINE__);
+        fprintf(stderr, "%s:%d db open db_env_setup_and_open\n", __FILE__,
+                __LINE__);
         goto fail_env;
     }
 
@@ -141,7 +141,8 @@ int db_open(const char* root_dir, size_t mapsize_bytes)
     ret = mdb_txn_commit(txn);
     if(ret != MDB_SUCCESS)
     {
-        fprintf(stderr, "%s:%d db_open mdb_txn_commit failed\n", __FILE__, __LINE__);
+        fprintf(stderr, "%s:%d db_open mdb_txn_commit failed\n", __FILE__,
+                __LINE__);
         goto fail_env;
     }
     return 0;
@@ -167,37 +168,47 @@ void db_close(void)
     db = NULL;
 }
 
-#define DB_BUILD_META_USER(ver_, role_, email_len_, email_)        \
+#define DB_USER_ID2META_BUILD_VAL(ver_, role_, email_len_, email_) \
     (id2data_val_t)                                                \
     {                                                              \
         .ver = (ver_), .role = (role_), .email_len = (email_len_), \
         .email = email_                                            \
     }
 
+#define DB_USER_EMAIL2ID_BUILD_VAL(user_id_) ((email2id_val_t){.v = (user_id_)})
+
 int db_user_register_new(const char* email, uint8_t elen, const char* password,
                          uuid16_t* new_id)
 {
+    /* USER_ID2DATA */
+    /* generate user key - ID */
     id2data_key_t usr_key = {0};
-    uuid_gen(&usr_key.k);
-    id2data_val_t usr_meta = DB_BUILD_META_USER(0, ROLE_VIEWER, elen, email);
+    int           ret     = uuid_gen(&usr_key.k);
+    if(ret != 0) return db_map_mdb_err(ret);
 
-    return user_id2data_put(&usr_key, &usr_meta, 0);
-    // Tx  tx;
-    // int rc = tx_begin(0, &tx);
+    /* generate user val - Meta */
+    id2data_val_t usr_val =
+        DB_USER_ID2META_BUILD_VAL(0, ROLE_VIEWER, elen, email);
 
-    // if(rc != 0) return rc;
+    /* derived from kv_put, put data in the DB */
+    ret = user_id2data_put(&usr_key, &usr_val, NO_OVERWRITE | APPEND);
+    if(ret != 0) return db_map_mdb_err(ret);
 
-    // rc = user_create_tx(&tx, email, elen, password, new_id);
+    /* USER_EMAIL2ID */
+    /* generate email key - email */
+    email2id_key_t email_key = {0};
+    email_key.ptr            = email;
+    email_key.len            = elen;
 
-    // if(rc == 0)
-    // {
-    //     rc = tx_commit(&tx);
-    //     if(rc) return rc;
-    //     return 0;
-    // }
+    /* generate email val - ID */
+    email2id_val_t email_val = DB_USER_EMAIL2ID_BUILD_VAL(usr_key.k);
 
-    // tx_abort(&tx);
-    // return rc;
+    ret = user_email2id_put(&email_key, &email_val, NO_OVERWRITE);
+    if(ret != 0) return db_map_mdb_err(ret);
+
+    if(new_id) *new_id = usr_key.k;
+
+    return ret;
 }
 
 int db_env_mapsize_expand(void)

@@ -86,12 +86,12 @@ int pr_email(const MDB_val* in, FILE* out)
 int enc_user_rec(const void* obj, MDB_val* out)
 {
     const id2data_val_t* u = (const id2data_val_t*)obj;
-    if (u->email_len > 255) return -EINVAL;
+    if(u->email_len > 255) return -EINVAL;
     static _Thread_local unsigned char buf[3 + 255];
-    unsigned char* p = buf;
-    *p++ = u->ver;
-    *p++ = u->role;
-    *p++ = u->email_len;
+    unsigned char*                     p = buf;
+    *p++                                 = u->ver;
+    *p++                                 = u->role;
+    *p++                                 = u->email_len;
     memcpy(p, u->email, u->email_len);
     out->mv_data = buf;
     out->mv_size = (size_t)(3 + u->email_len);
@@ -102,16 +102,15 @@ int dec_user_rec(const MDB_val* in, void* obj)
 {
     const unsigned char* p = (const unsigned char*)in->mv_data;
     const unsigned char* e = p + in->mv_size;
-    if (e - p < 4) return -EINVAL;
+    if(e - p < 4) return -EINVAL;
     id2data_val_t* u = (id2data_val_t*)obj;
-    u->ver = *p++;
-    u->role = *p++;
-    u->email_len = *p++;
-    if ((size_t)(e - p) < u->email_len) return -EINVAL;
+    u->ver           = *p++;
+    u->role          = *p++;
+    u->email_len     = *p++;
+    if((size_t)(e - p) < u->email_len) return -EINVAL;
     memcpy(u->email, p, u->email_len);
     // add terminating zero if you rely on it:
-    if (u->email_len < sizeof u->email)
-        u->email[u->email_len] = '\0';
+    if(u->email_len < sizeof u->email) u->email[u->email_len] = '\0';
     return 0;
 }
 

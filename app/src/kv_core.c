@@ -3,19 +3,35 @@
 #include "codec.h"
 int kv_put(DBI_ID id, const void* key_obj, const void* val_obj, unsigned flags)
 {
-    MDB_val     k, v;
+    if(!key_obj || !val_obj)
+    {
+        return -EIO;
+    }
+
+    /* Get the actual DBI */
     dbi_desc_t* d = &db->dbis[id];
+
+    /* Prepare insertion variables */
+    MDB_val k, v;
+
+    /* Encode key and value into prepared variables */
     if(d->key_enc(key_obj, &k)) return -EINVAL;
     if(d->val_enc(val_obj, &v)) return -EINVAL;
+
+    /* Initialize transaction */
     MDB_txn* txn;
     int      rc = mdb_txn_begin(db->env, NULL, 0, &txn);
     if(rc) return db_map_mdb_err(rc);
+
+    /* Put data into the DB */
     rc = mdb_put(txn, d->dbi, &k, &v, flags);
     if(rc)
     {
         mdb_txn_abort(txn);
         return db_map_mdb_err(rc);
     }
+
+    /* Commit insertion */
     rc = mdb_txn_commit(txn);
     return db_map_mdb_err(rc);
 }
