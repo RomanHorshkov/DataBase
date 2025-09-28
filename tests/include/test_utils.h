@@ -72,8 +72,8 @@ void        tu_failf(const char* file, int line, const char* fmt, ...);
 /* Preferred printing: writes to configurable sinks (default: stdout/stderr). */
 void     tu_out(const char* fmt, ...);
 void     tu_err(const char* fmt, ...);
-void     tu_io_reset(void);               /* back to stdout/stderr   */
-int      tu_io_set(FILE* out, FILE* err); /* set sinks (no ownership) */
+void     tu_io_reset(void);                     /* back to stdout/stderr   */
+int      tu_io_set(FILE* out, FILE* err);       /* set sinks (no ownership) */
 int      tu_io_set_files(const char* out_path,
                          const char* err_path); /* owns files */
 uint64_t tu_dir_size_bytes(const char* path);

@@ -46,7 +46,7 @@ int t_add_user_and_find(void)
     uint8_t id2[DB_UUID_SIZE] = {0};
 
     size_t n_users = 1;
-    char  *emails  = tu_generate_email_list_seq(n_users, NULL, NULL);
+    char*  emails  = tu_generate_email_list_seq(n_users, NULL, NULL);
     if(!emails)
     {
         tu_failf(__FILE__, __LINE__, "email alloc failed");
@@ -59,7 +59,7 @@ int t_add_user_and_find(void)
         memset(id, 0, sizeof id);
         memset(id2, 0, sizeof id2);
 
-        char *email_in = emails + i * DB_EMAIL_MAX_LEN;
+        char* email_in = emails + i * DB_EMAIL_MAX_LEN;
 
         /* add new user */
         EXPECT_EQ_RC(db_add_user(email_in, id), 0);
@@ -542,7 +542,7 @@ int t_share_denied_when_not_owner(void)
     EXPECT_EQ_RC(db_data_add_from_fd(O, fd, "x/bin", D), 0);
 
     EXPECT_EQ_RC(db_user_share_data_with_user_email(O, D, ev),
-                 0); /* grant view */
+                 0);      /* grant view */
     EXPECT_EQ_RC(db_user_share_data_with_user_email(V, D, ez),
                  -EPERM); /* viewer cannot re-share */
 
@@ -777,7 +777,7 @@ int t_data_meta_sane(void)
     int fd = tu_make_blob("./.tmp_meta.dcm", "payload-xyz");
     EXPECT_TRUE(fd >= 0);
     uint8_t     D[DB_UUID_SIZE] = {0};
-    const char *mime            = "application/dicom";
+    const char* mime            = "application/dicom";
     EXPECT_EQ_RC(db_data_add_from_fd(U, fd, mime, D), 0);
 
     DataMeta m = {0};
@@ -935,7 +935,7 @@ static const TU_Test TESTS[] = {
 
 static const size_t NTESTS = sizeof(TESTS) / sizeof(TESTS[0]);
 
-int run_test_func(int argc, char **argv)
+int run_test_func(int argc, char** argv)
 {
     return tu_run_suite("func", TESTS, NTESTS, argc, argv);
 }

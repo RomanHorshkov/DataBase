@@ -1,10 +1,10 @@
 // src/uuid.c
 #include "uuid.h"
 
+#include <sodium.h>  // randombytes_buf()
 #include <stdatomic.h>
 #include <string.h>
 #include <time.h>
-#include <sodium.h>   // randombytes_buf()
 
 /* Monotonic state: upper 52 bits = millis, lower 12 bits = seq */
 static _Atomic uint64_t g_v7_state = 0;
@@ -46,11 +46,11 @@ int uuid_gen(uuid16_t* out)
         use_ms = (now_ms >= prev_ms) ? now_ms : prev_ms;
 
         /* same ms => bump seq; new ms => seq=0 */
-        uint16_t next_seq = (use_ms == prev_ms) ? (uint16_t)((prev_seq + 1u) & 0x0FFFu) : 0u;
+        uint16_t next_seq =
+            (use_ms == prev_ms) ? (uint16_t)((prev_seq + 1u) & 0x0FFFu) : 0u;
 
         /* if we wrapped within same ms, wait for the next ms and retry */
-        if(use_ms == prev_ms && next_seq == 0u)
-            continue;
+        if(use_ms == prev_ms && next_seq == 0u) continue;
 
         const uint64_t next = (use_ms << 12) | (uint64_t)next_seq;
         if(atomic_compare_exchange_weak_explicit(&g_v7_state, &prev, next,
@@ -77,13 +77,13 @@ int uuid_gen(uuid16_t* out)
     out->b[1] = (uint8_t)((use_ms >> 32) & 0xFF);
     out->b[2] = (uint8_t)((use_ms >> 24) & 0xFF);
     out->b[3] = (uint8_t)((use_ms >> 16) & 0xFF);
-    out->b[4] = (uint8_t)((use_ms >>  8) & 0xFF);
-    out->b[5] = (uint8_t)((use_ms >>  0) & 0xFF);
+    out->b[4] = (uint8_t)((use_ms >> 8) & 0xFF);
+    out->b[5] = (uint8_t)((use_ms >> 0) & 0xFF);
 
     out->b[6] = (uint8_t)((0x7u << 4) | ((seq12 >> 8) & 0x0Fu));  // version = 7
     out->b[7] = (uint8_t)(seq12 & 0xFFu);
 
-    out->b[8]  = (uint8_t)((rb[0] & 0x3Fu) | 0x80u); // variant = 10xxxxxx
+    out->b[8]  = (uint8_t)((rb[0] & 0x3Fu) | 0x80u);  // variant = 10xxxxxx
     out->b[9]  = rb[1];
     out->b[10] = rb[2];
     out->b[11] = rb[3];

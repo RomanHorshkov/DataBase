@@ -468,7 +468,7 @@ int tu_run_suite(const char* suite_name, const TU_Test* tests, size_t ntests,
             if(i + 1 < argc) i++; /* ignored */
         }
         else
-        { /* ignore unknowns to keep it simple */
+        {                         /* ignore unknowns to keep it simple */
         }
     }
 

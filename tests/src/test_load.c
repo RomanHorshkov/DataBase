@@ -69,7 +69,7 @@ static int tl_add_many_users_sample_lookup(void)
 
     const size_t N = env_sz("STRESS_USERS", 5000); /* total users to insert */
     const size_t SAMPLE =
-        env_sz("STRESS_SAMPLE", 2000); /* lookups after insert */
+        env_sz("STRESS_SAMPLE", 2000);             /* lookups after insert */
 
     char* emails = tu_generate_email_list_seq(N, "u_", "@x.com");
     if(!emails)
@@ -408,8 +408,8 @@ static int tl_upload_mixed_sizes_and_share_details(void)
         double us_per =
             total_ok ? (1000.0 * t_upload_total_ms / (double)total_ok) : 0.0;
         double mibs = (t_upload_total_ms > 0.0)
-                          ? (mib_ok / (t_upload_total_ms / 1000.0))
-                          : 0.0;
+                        ? (mib_ok / (t_upload_total_ms / 1000.0))
+                        : 0.0;
         fprintf(stderr,
                 C_CYN
                 "upload TOTAL  ok=%5zu objs  %7.2f MiB: %.1f ms  (%.1f µs/op)  "
