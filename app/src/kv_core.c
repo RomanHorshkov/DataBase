@@ -1,6 +1,50 @@
+/**
+ * @file kv_core.c
+ * @brief 
+ *
+ * @author  Roman Horshkov <roman.horshkov@gmail.com>
+ * @date    2025
+ * (c) 2025
+ */
+
 #include "kv_core.h"
 #include <string.h>
 #include "codec.h"
+
+/****************************************************************************
+ * PRIVATE DEFINES
+ ****************************************************************************
+ */
+/* None */
+
+/****************************************************************************
+ * PRIVATE STUCTURED VARIABLES
+ ****************************************************************************
+ */
+
+struct dump_ctx
+{
+    dbi_desc_t* d;
+    FILE*       out;
+};
+
+/****************************************************************************
+ * PRIVATE VARIABLES
+ ****************************************************************************
+ */
+/* None */
+
+/****************************************************************************
+ * PRIVATE FUNCTIONS PROTOTYPES
+ ****************************************************************************
+ */
+static int dump_cb(const MDB_val* k, const MDB_val* v, void* ud);
+
+/****************************************************************************
+ * PUBLIC FUNCTIONS DEFINITIONS
+ ****************************************************************************
+ */
+
 int kv_put(DBI_ID id, const void* key_obj, const void* val_obj, unsigned flags)
 {
     if(!key_obj || !val_obj)
@@ -129,12 +173,28 @@ int kv_scan(DBI_ID id, const void* start_key_obj, const void* end_key_obj,
     return 0;
 }
 
-/* dump */
-struct dump_ctx
+int kv_dump(DBI_ID id, FILE* out)
 {
-    dbi_desc_t* d;
-    FILE*       out;
-};
+    struct dump_ctx c = {.d = &db->dbis[id], .out = out};
+    return kv_scan(id, NULL, NULL, dump_cb, &c);
+}
+
+int kv_dump_all(FILE* out)
+{
+    for(int i = 0; i < DBI_COUNT; i++)
+    {
+        fprintf(out, "# %s", db->dbis[i].name);
+        kv_dump((DBI_ID)i, out);
+    }
+    return 0;
+}
+
+/****************************************************************************
+ * PRIVATE FUNCTIONS DEFINITIONS
+ ****************************************************************************
+ */
+
+/* dump */
 static int dump_cb(const MDB_val* k, const MDB_val* v, void* ud)
 {
     struct dump_ctx* c = (struct dump_ctx*)ud;
@@ -148,19 +208,5 @@ static int dump_cb(const MDB_val* k, const MDB_val* v, void* ud)
     else
         fprintf(c->out, "<v %zuB>", v->mv_size);
     fputc('\n', c->out);
-    return 0;
-}
-int kv_dump(DBI_ID id, FILE* out)
-{
-    struct dump_ctx c = {.d = &db->dbis[id], .out = out};
-    return kv_scan(id, NULL, NULL, dump_cb, &c);
-}
-int kv_dump_all(FILE* out)
-{
-    for(int i = 0; i < DBI_COUNT; i++)
-    {
-        fprintf(out, "# %s", db->dbis[i].name);
-        kv_dump((DBI_ID)i, out);
-    }
     return 0;
 }

@@ -23,7 +23,7 @@ int auth_register(const char* email, uint8_t elen, const char* password,
 //     if(rc) return rc;
 
 //     MDB_val k   = {.mv_size = elen, .mv_data = (void*)email}, v;
-//     int     mrc = mdb_get(tx.txn, db_dbi(DBI_EMAIL2ID), &k, &v);
+//     int     mrc = mdb_get(tx.txn, db_get_dbi(DBI_EMAIL2ID), &k, &v);
 
 //     if(mrc != MDB_SUCCESS)
 //     {
@@ -39,7 +39,7 @@ int auth_register(const char* email, uint8_t elen, const char* password,
 //     uuid16_t uid;
 //     memcpy(uid.b, v.mv_data, DB_ID_SIZE);
 //     MDB_val ku = {.mv_size = DB_ID_SIZE, .mv_data = (void*)uid.b}, vu;
-//     mrc        = mdb_get(tx.txn, db_dbi(DBI_USER), &ku, &vu);
+//     mrc        = mdb_get(tx.txn, db_get_dbi(DBI_USER), &ku, &vu);
 //     if(mrc != MDB_SUCCESS)
 //     {
 //         tx_abort(&tx);
@@ -66,7 +66,7 @@ int auth_register(const char* email, uint8_t elen, const char* password,
 //     int rc = tx_begin(0, &tx);
 //     if(rc) return rc;
 //     MDB_val ku  = {.mv_size = DB_ID_SIZE, .mv_data = (void*)uid->b}, vu;
-//     int     mrc = mdb_get(tx.txn, db_dbi(DBI_USER), &ku, &vu);
+//     int     mrc = mdb_get(tx.txn, db_get_dbi(DBI_USER), &ku, &vu);
 //     if(mrc != MDB_SUCCESS)
 //     {
 //         tx_abort(&tx);
@@ -90,7 +90,7 @@ int auth_register(const char* email, uint8_t elen, const char* password,
 //     rec.pw_tag = 1;
 //     MDB_val vnew;
 //     enc_user_rec(&rec, &vnew);
-//     mrc = mdb_put(tx.txn, db_dbi(DBI_USER), &ku, &vnew, 0);
+//     mrc = mdb_put(tx.txn, db_get_dbi(DBI_USER), &ku, &vnew, 0);
 //     if(mrc != MDB_SUCCESS)
 //     {
 //         tx_abort(&tx);

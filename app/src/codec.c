@@ -21,10 +21,12 @@ int enc_uuid(const void* obj, MDB_val* out)
 {
     return enc_fixed(obj, DB_ID_SIZE, out);
 }
+
 int dec_uuid(const MDB_val* in, void* obj)
 {
     return dec_fixed(in, obj, DB_ID_SIZE);
 }
+
 int pr_uuid(const MDB_val* in, FILE* out)
 {
     if(in->mv_size != DB_ID_SIZE) return -EINVAL;
@@ -67,22 +69,7 @@ int pr_u8_one(const MDB_val* in, FILE* out)
     fprintf(out, "1");
     return 0;
 }
-
-/* email key */
-int enc_email(const void* obj, MDB_val* out)
-{
-    const email2id_key_t* k = (const email2id_key_t*)obj;
-    out->mv_data            = (void*)k->ptr;
-    out->mv_size            = k->len;
-    return 0;
-}
-
-int pr_email(const MDB_val* in, FILE* out)
-{
-    fwrite(in->mv_data, 1, in->mv_size, out);
-    return 0;
-}
-
+/* user_id2data */
 int enc_user_rec(const void* obj, MDB_val* out)
 {
     const id2data_val_t* u = (const id2data_val_t*)obj;
@@ -100,17 +87,25 @@ int enc_user_rec(const void* obj, MDB_val* out)
 
 int dec_user_rec(const MDB_val* in, void* obj)
 {
+    /* transform data */
     const unsigned char* p = (const unsigned char*)in->mv_data;
+
+    /* set the end of data */
     const unsigned char* e = p + in->mv_size;
+
+    /* check data size */
     if(e - p < 4) return -EINVAL;
     id2data_val_t* u = (id2data_val_t*)obj;
     u->ver           = *p++;
     u->role          = *p++;
     u->email_len     = *p++;
+
+    /* Check remaining (email) size*/
     if((size_t)(e - p) < u->email_len) return -EINVAL;
+
+    /* copy memory without terminating \0 */
     memcpy(u->email, p, u->email_len);
-    // add terminating zero if you rely on it:
-    if(u->email_len < sizeof u->email) u->email[u->email_len] = '\0';
+
     return 0;
 }
 
@@ -120,7 +115,22 @@ int pr_user_rec(const MDB_val* in, FILE* out)
     if(dec_user_rec(in, &u) != 0) return -EINVAL;
     fprintf(out, "{ver:%u role:%u email:'", u.ver, u.role);
     fwrite(u.email, 1, u.email_len, out);
-    // fprintf(out, "' tag:%u}", u.pw_tag);
+    fprintf(out, "}");
+    return 0;
+}
+
+/* user_email2id */
+int enc_email(const void* obj, MDB_val* out)
+{
+    const email2id_key_t* k = (const email2id_key_t*)obj;
+    out->mv_data            = (void*)k->ptr;
+    out->mv_size            = k->len;
+    return 0;
+}
+
+int pr_email(const MDB_val* in, FILE* out)
+{
+    fwrite(in->mv_data, 1, in->mv_size, out);
     return 0;
 }
 

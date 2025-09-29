@@ -12,7 +12,7 @@
 //     enc_acl_fwd_k(&fk, &kf);
 //     MDB_val v1;
 //     enc_u8_one(NULL, &v1);
-//     int mrc = mdb_put(tx->txn, db_dbi(db, DBI_ACL_FWD), &kf, &v1, 0);
+//     int mrc = mdb_put(tx->txn, db_get_dbi(db, DBI_ACL_FWD), &kf, &v1, 0);
 //     if(mrc != MDB_SUCCESS && mrc != MDB_KEYEXIST) return db_map_mdb_err(mrc);
 //     acl_rev_key_t rk;
 //     rk.resource  = *resource;
@@ -20,7 +20,7 @@
 //     rk.principal = *principal;
 //     MDB_val kr;
 //     enc_acl_rev_k(&rk, &kr);
-//     mrc = mdb_put(tx->txn, db_dbi(db, DBI_ACL_REV), &kr, &v1, 0);
+//     mrc = mdb_put(tx->txn, db_get_dbi(db, DBI_ACL_REV), &kr, &v1, 0);
 //     if(mrc != MDB_SUCCESS && mrc != MDB_KEYEXIST) return db_map_mdb_err(mrc);
 //     return 0;
 // }

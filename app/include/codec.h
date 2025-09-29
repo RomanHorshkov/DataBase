@@ -24,36 +24,22 @@ int pr_sha256(const MDB_val* in, FILE* out);
 int enc_u8_one(const void* obj, MDB_val* out);
 int pr_u8_one(const MDB_val* in, FILE* out);
 
-int enc_email(const void* obj, MDB_val* out);
-int pr_email(const MDB_val* in, FILE* out);
-
-/* ===== domain records ===== */
-struct user_rec
-{
-    uint8_t ver;
-    uint8_t role;
-    uint8_t email_len;
-    char    email[255];
-    uint8_t pw_tag;
-    char    pw_hash[128];
-};
+/* user_id2data */
 int enc_user_rec(const void* obj, MDB_val* out);
 int dec_user_rec(const MDB_val* in, void* obj);
 int pr_user_rec(const MDB_val* in, FILE* out);
 
-struct data_meta_rec
-{
-    uint8_t  ver;
-    uint64_t size;
-    uint32_t mime_len;
-    char     mime[64];
-    uint64_t created_at_unix;
-};
-int enc_data_meta(const void* obj, MDB_val* out);
-int dec_data_meta(const MDB_val* in, void* obj);
-int pr_data_meta(const MDB_val* in, FILE* out);
+/* user_email2id */
+int enc_email(const void* obj, MDB_val* out);
+int pr_email(const MDB_val* in, FILE* out);
 
-int enc_acl_fwd_k(const void* obj, MDB_val* out);
-int enc_acl_rev_k(const void* obj, MDB_val* out);
-int pr_acl_fwd_k(const MDB_val* in, FILE* out);
-int pr_acl_rev_k(const MDB_val* in, FILE* out);
+/* ===== domain records ===== */
+
+// int enc_data_meta(const void* obj, MDB_val* out);
+// int dec_data_meta(const MDB_val* in, void* obj);
+// int pr_data_meta(const MDB_val* in, FILE* out);
+
+// int enc_acl_fwd_k(const void* obj, MDB_val* out);
+// int enc_acl_rev_k(const void* obj, MDB_val* out);
+// int pr_acl_fwd_k(const MDB_val* in, FILE* out);
+// int pr_acl_rev_k(const MDB_val* in, FILE* out);

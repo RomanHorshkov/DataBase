@@ -329,7 +329,7 @@ static int user_create_tx(Tx* tx, const char* email, uint8_t elen,
     /* Put email→id and user */
     MDB_val v_uid = {.mv_size = DB_ID_SIZE, .mv_data = (void*)uid.b};
 
-    mrc = mdb_put(tx->txn, db_dbi(DBI_USER_EMAIL2ID), &k_email, &v_uid,
+    mrc = mdb_put(tx->txn, db_get_dbi(DBI_USER_EMAIL2ID), &k_email, &v_uid,
                   MDB_NOOVERWRITE);
 
     if(mrc != MDB_SUCCESS) return db_map_mdb_err(mrc);
@@ -339,7 +339,7 @@ static int user_create_tx(Tx* tx, const char* email, uint8_t elen,
 
     if(enc_user_rec(&rec, &v_user) != 0) return -EINVAL;
 
-    mrc = mdb_put(tx->txn, db_dbi(DBI_USER_ID2DATA), &k_uid, &v_user,
+    mrc = mdb_put(tx->txn, db_get_dbi(DBI_USER_ID2DATA), &k_uid, &v_user,
                   MDB_NOOVERWRITE);
 
     if(mrc != MDB_SUCCESS) return db_map_mdb_err(mrc);
@@ -352,7 +352,7 @@ static int ensure_user_tx(Tx* tx, const char* email, uint8_t elen,
                           uuid16_t* uid)
 {
     MDB_val k   = {.mv_size = elen, .mv_data = (void*)email}, v;
-    int     mrc = mdb_get(tx->txn, db_dbi(DBI_USER_EMAIL2ID), &k, &v);
+    int     mrc = mdb_get(tx->txn, db_get_dbi(DBI_USER_EMAIL2ID), &k, &v);
     if(mrc == MDB_SUCCESS)
     {
         if(v.mv_size != DB_ID_SIZE) return -EIO;
