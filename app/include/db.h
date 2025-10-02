@@ -30,7 +30,15 @@ typedef int (*db_decode_fn)(const MDB_val* in, void* obj);
 typedef int (*db_print_fn)(const MDB_val* in, FILE* out);
 typedef int (*db_cmp_fn)(const MDB_val* a, const MDB_val* b);
 
-/* === DBI enum expands from schemas.def (define enum FIRST!) === */
+/**
+ * DBI_ID enum expands from schemas.def
+ * enum {
+ *      DBI_USER_ID2DATA,
+ *      DBI_USER_EMAIL2ID,
+ *      DBI_COUNT
+ * }
+ * Defined before 
+ */
 #define DBI_EXPAND_ENUM(id, name, ...) DBI_##id,
 typedef enum
 {
@@ -52,7 +60,8 @@ typedef struct
     db_decode_fn val_dec;
     db_print_fn  val_prn;
     db_cmp_fn    cmp;
-    unsigned     flags;
+    unsigned     open_flags;
+    unsigned     put_flags;
     MDB_dbi      dbi;
 } dbi_desc_t;
 

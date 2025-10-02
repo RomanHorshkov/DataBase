@@ -1,10 +1,13 @@
-/* id, name, key_enc, key_dec, key_prn, val_enc, val_dec, val_prn, cmp, flags */
-/* USER_ID2DATA: key=uuid16, value=user_rec */
-_(USER_ID2DATA, "user_id2data", enc_uuid, dec_uuid, pr_uuid, enc_user_rec, dec_user_rec, pr_user_rec, NULL, 0)
+/* id, name,
+key_enc, key_dec, key_prn,
+val_enc, val_dec, val_prn,
+cmp, open_flags, put_flags */
+/* USER_ID2DATA: key=uuid7 strictly monotonic, value=user_rec */
+_(USER_ID2DATA, "user_id2data", enc_uuid, dec_uuid, pr_uuid, enc_user_rec, dec_user_rec, pr_user_rec, NULL, 0, NO_OVERWRITE | APPEND)
 
 
 /* USER_EMAIL2ID: key=email bytes, value=uuid16 */
-_(USER_EMAIL2ID, "user_email2id", enc_email, NULL, pr_email, enc_uuid, dec_uuid, pr_uuid, NULL, 0)
+_(USER_EMAIL2ID, "user_email2id", enc_email, NULL, pr_email, enc_uuid, dec_uuid, pr_uuid, NULL, 0, NO_OVERWRITE)
 
 
 // /* DATA_META: key=uuid16(data_id), value=data_meta_rec */

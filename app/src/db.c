@@ -31,14 +31,20 @@
 /* Global DB handle */
 DB* db = NULL;
 
-/* Registry from schemas.def (enum is already defined in the header) */
-#define DBI_EXPAND_DESC(id, name, kenc, kdec, kpr, venc, vdec, vpr, cmp, \
-                        flags)                                           \
-    [DBI_##id] =                                                         \
-        (dbi_desc_t){name, kenc, kdec, kpr, venc, vdec, vpr, cmp, flags, 0},
+/**
+ * Registry from schemas.def
+ * enum is already defined in the header
+ * build a static REGISTRY of dbi_desc_t
+ */
+#define DBI_EXPAND_DESC(id, name, kenc, kdec, kpr, venc, vdec, vpr, cmp,     \
+                        open_flags, put_flags)                               \
+    [DBI_##id] = (dbi_desc_t){name, kenc, kdec,       kpr,       venc, vdec, \
+                              vpr,  cmp,  open_flags, put_flags, 0},
 static dbi_desc_t REGISTRY[DBI_COUNT] = {
-#define _(id, name, kenc, kdec, kpr, venc, vdec, vpr, cmp, flags) \
-    DBI_EXPAND_DESC(id, name, kenc, kdec, kpr, venc, vdec, vpr, cmp, flags)
+#define _(id, name, kenc, kdec, kpr, venc, vdec, vpr, cmp, open_flags, \
+          put_flags)                                                   \
+    DBI_EXPAND_DESC(id, name, kenc, kdec, kpr, venc, vdec, vpr, cmp,   \
+                    open_flags, put_flags)
 #include "../include/schemas.def"
 #undef _
 };
@@ -122,8 +128,9 @@ int db_open(const char* root_dir, size_t mapsize_bytes)
         db->dbis[i] = REGISTRY[i];
         fprintf(stderr, "%s:%d db open dbi name %s\n", __FILE__, __LINE__,
                 db->dbis[i].name);
-        ret = mdb_dbi_open(txn, db->dbis[i].name,
-                           db->dbis[i].flags | MDB_CREATE, &db->dbis[i].dbi);
+        ret =
+            mdb_dbi_open(txn, db->dbis[i].name,
+                         MDB_CREATE | db->dbis[i].open_flags, &db->dbis[i].dbi);
         if(ret != MDB_SUCCESS)
         {
             fprintf(stderr, "%s:%d db open mdb_dbi_open %s error %d\n",

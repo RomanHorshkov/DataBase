@@ -80,6 +80,24 @@ int kv_put(DBI_ID id, const void* key_obj, const void* val_obj, unsigned flags)
     return db_map_mdb_err(rc);
 }
 
+/* Write one key/value into an existing transaction, using dbi-desc encoders. */
+int kv_put_tx(Tx tx, DBI_ID id, const void* key_obj, const void* val_obj,
+              unsigned flags)
+/* - tx: opaque wrapper holding MDB_txn* as tx.txn, matching current style
+ * - id: DBI enum (from schemas.def)
+ * - key_obj/val_obj: typed objects consumed by encoders in dbi_desc_t
+ * - flags: LMDB put flags (e.g., NO_OVERWRITE, APPEND)
+ */
+{
+    if(!key_obj || !val_obj) return -EIO;
+    dbi_desc_t* d = &db->dbis[id];
+    MDB_val     k, v;
+    if(d->key_enc(key_obj, &k)) return -EINVAL;
+    if(d->val_enc(val_obj, &v)) return -EINVAL;
+    int rc = mdb_put(tx.txn, d->dbi, &k, &v, flags);
+    return db_map_mdb_err(rc);
+}
+
 int kv_get(DBI_ID id, const void* key_obj, void* out_val_obj)
 {
     MDB_val     k, v;
