@@ -26,9 +26,9 @@ static inline void rand8(uint8_t out[8])
 
 /* --- public ---------------------------------------------------------------- */
 
-int uuid_gen(uuid16_t* out)
+int uuid_gen(uint8_t* out)
 {
-    if(!out) return -EINVAL;
+    if(!out) return -1;
 
     uint64_t use_ms;
     uint16_t seq12;
@@ -73,36 +73,24 @@ int uuid_gen(uuid16_t* out)
        - byte    8  : variant (10xxxxxx) | top 6 bits of rb[0]
        - bytes 9..15: remaining 7 bytes from rb[1..7]
     */
-    out->b[0] = (uint8_t)((use_ms >> 40) & 0xFF);
-    out->b[1] = (uint8_t)((use_ms >> 32) & 0xFF);
-    out->b[2] = (uint8_t)((use_ms >> 24) & 0xFF);
-    out->b[3] = (uint8_t)((use_ms >> 16) & 0xFF);
-    out->b[4] = (uint8_t)((use_ms >> 8) & 0xFF);
-    out->b[5] = (uint8_t)((use_ms >> 0) & 0xFF);
+    out[0] = (uint8_t)((use_ms >> 40) & 0xFF);
+    out[1] = (uint8_t)((use_ms >> 32) & 0xFF);
+    out[2] = (uint8_t)((use_ms >> 24) & 0xFF);
+    out[3] = (uint8_t)((use_ms >> 16) & 0xFF);
+    out[4] = (uint8_t)((use_ms >> 8) & 0xFF);
+    out[5] = (uint8_t)((use_ms >> 0) & 0xFF);
 
-    out->b[6] = (uint8_t)((0x7u << 4) | ((seq12 >> 8) & 0x0Fu));  // version = 7
-    out->b[7] = (uint8_t)(seq12 & 0xFFu);
+    out[6] = (uint8_t)((0x7u << 4) | ((seq12 >> 8) & 0x0Fu));  // version = 7
+    out[7] = (uint8_t)(seq12 & 0xFFu);
 
-    out->b[8]  = (uint8_t)((rb[0] & 0x3Fu) | 0x80u);  // variant = 10xxxxxx
-    out->b[9]  = rb[1];
-    out->b[10] = rb[2];
-    out->b[11] = rb[3];
-    out->b[12] = rb[4];
-    out->b[13] = rb[5];
-    out->b[14] = rb[6];
-    out->b[15] = rb[7];
+    out[8]  = (uint8_t)((rb[0] & 0x3Fu) | 0x80u);  // variant = 10xxxxxx
+    out[9]  = rb[1];
+    out[10] = rb[2];
+    out[11] = rb[3];
+    out[12] = rb[4];
+    out[13] = rb[5];
+    out[14] = rb[6];
+    out[15] = rb[7];
 
     return 0;
-}
-
-/* Optional: hex helper */
-void uuid_to_hex(const uuid16_t* id, char out32[33])
-{
-    static const char* h = "0123456789abcdef";
-    for(int i = 0; i < DB_ID_SIZE; ++i)
-    {
-        out32[i * 2]     = h[(id->b[i] >> 4) & 0xF];
-        out32[i * 2 + 1] = h[id->b[i] & 0xF];
-    }
-    out32[32] = '\0';
 }
