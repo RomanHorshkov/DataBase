@@ -38,10 +38,10 @@
 //     return fd;
 // }
 
-// static void print_id(const char* label, uint8_t id[DB_UUID_SIZE])
+// static void print_id(const char* label, uint8_t id[])
 // {
 //     printf("%s: ", label);
-//     for(int i = 0; i < DB_UUID_SIZE; i++)
+//     for(int i = 0; i < ; i++)
 //         printf("%02x", id[i]);
 //     puts("");
 // }
@@ -53,7 +53,7 @@
 //     db_user_list_all(users_of_interest, &num_users);
 //     for(size_t i = 0; i < num_users; i++)
 //     {
-//         print_id("User:", users_of_interest + i * DB_UUID_SIZE);
+//         print_id("User:", users_of_interest + i * );
 //     }
 // }
 
@@ -64,7 +64,7 @@
 //     db_user_list_publishers(users_of_interest, &num_users);
 //     for(size_t i = 0; i < num_users; i++)
 //     {
-//         print_id("Publisher:", users_of_interest + i * DB_UUID_SIZE);
+//         print_id("Publisher:", users_of_interest + i * );
 //     }
 // }
 
@@ -75,7 +75,7 @@
 //     db_user_list_viewers(users_of_interest, &num_users);
 //     for(size_t i = 0; i < num_users; i++)
 //     {
-//         print_id("Viewer:", users_of_interest + i * DB_UUID_SIZE);
+//         print_id("Viewer:", users_of_interest + i * );
 //     }
 // }
 
@@ -95,21 +95,21 @@ int main(void)
     // int fd_A      = make_blob("./blob_A.dcm", "unique-A");
     // int fd_B      = make_blob("./blob_B.dcm", "unique-B");
 
-    // /* 2) seed users */
-    // char    alice[DB_EMAIL_MAX_LEN]  = "alice@example.com";
-    // char    bob[DB_EMAIL_MAX_LEN]    = "bob@example.com";
-    // char    carol[DB_EMAIL_MAX_LEN]  = "carol@example.com";
-    // char    anton[DB_EMAIL_MAX_LEN]  = "anton@example.com";
-    // char    luana[DB_EMAIL_MAX_LEN]  = "luana@example.com";
-    // char    roman[DB_EMAIL_MAX_LEN]  = "roman@example.com";
-    // char    luca[DB_EMAIL_MAX_LEN]   = "luca@example.com";
-    // char    franco[DB_EMAIL_MAX_LEN] = "franco@example.com";
-    // uint8_t UA[DB_UUID_SIZE] = {0}, UB[DB_UUID_SIZE] = {0},
-    //         UC[DB_UUID_SIZE] = {0}, UD[DB_UUID_SIZE] = {0},
-    //         UE[DB_UUID_SIZE] = {0}, UF[DB_UUID_SIZE] = {0},
-    //         UG[DB_UUID_SIZE] = {0}, UH[DB_UUID_SIZE] = {0};
+    /* 2) seed users */
+    char alice[]  = "alice@example.com";
+    char bob[]    = "bob@example.com";
+    char carol[]  = "carol@example.com";
+    char anton[]  = "anton@example.com";
+    char luana[]  = "luana@example.com";
+    char roman[]  = "roman@example.com";
+    char luca[]   = "luca@example.com";
+    char franco[] = "franco@example.com";
+    // uint8_t UA[] = {0}, UB[] = {0},
+    //         UC[] = {0}, UD[] = {0},
+    //         UE[] = {0}, UF[] = {0},
+    //         UG[] = {0}, UH[] = {0};
 
-    // // auth_register_new(alice, UA)
+    CHECK(auth_register_new(alice));
 
     // CHECK(auth_register_new(alice, UA));
     // CHECK(db_add_user(bob, UB));
@@ -136,8 +136,8 @@ int main(void)
 
     // /* upload under Alice */
     // puts("=== Alice uploads ===");
-    // uint8_t D_shared[DB_UUID_SIZE] = {0}, D_A[DB_UUID_SIZE] = {0},
-    //         D_B[DB_UUID_SIZE] = {0};
+    // uint8_t D_shared[] = {0}, D_A[] = {0},
+    //         D_B[] = {0};
     // db_data_add_from_fd(UA, fd_shared, "application/dicom", D_shared);
     // // db_data_add_from_fd(UA, fd_A,      "application/dicom", D_A);
     // // db_data_add_from_fd(UA, fd_B,      "application/dicom", D_B);

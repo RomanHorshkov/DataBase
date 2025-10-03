@@ -108,37 +108,52 @@ static int user_register_new_ops(DB_operation_t** operations, size_t* n_ops,
     TO DO: insert new user pwd
     */
 
-    // size_t N_OPERATIONS = 2;
+    static uint8_t db_version   = DB_VER;
+    static uint8_t user_role    = USER_ROLE_NONE;
+    size_t         N_OPERATIONS = 2;
 
-    // DB_operation_t *ops = (DB_operation_t*)malloc(N_OPERATIONS * sizeof(DB_operation_t));
+    DB_operation_t* ops =
+        (DB_operation_t*)calloc(N_OPERATIONS, sizeof(DB_operation_t));
 
-    // if(!ops)
-    // {
-    //     return -EINVAL;
-    // }
+    if(!ops)
+    {
+        fprintf(stderr, "[db_user] user_register_new_ops calloc failure\n");
+        return -EINVAL;
+    }
 
-    // void_store * key_store_gen =
+    /* DBi id2meta */
+    ops[0].type  = DB_OPERATION_PUT_RESERVE;
+    ops[0].dbi   = DB->db_user_id2meta;
+    ops[0].flags = MDB_NOOVERWRITE | MDB_APPEND;
+    
+    /* Initialize key = id */
+    void_store_init(1, &ops[0].key_store); /* user id has 1 ptr to id*/
+    void_store_add(ops[0].key_store, (void*)user_id, DB_UUID_SIZE);
+    
+    /* Initialize meta = ver, role, elen, email */
+    void_store_init(4, &ops[0].val_store);
+    void_store_add(ops[0].val_store, &db_version, sizeof(uint8_t));
+    void_store_add(ops[0].val_store, &user_role, sizeof(uint8_t));
+    void_store_add(ops[0].val_store, email_len, sizeof(uint8_t));
+    void_store_add(ops[0].val_store, email, sizeof(uint8_t));
 
-    // ops[0].op_type = DB_OPERATION_PUT_RESERVE;
-    // ops[0].dbi = DB->db_user_id2meta;
+    /* DBI email2id */
+    ops[1].type  = DB_OPERATION_PUT_RESERVE;
+    ops[1].dbi   = DB->db_user_mail2id;
+    ops[1].flags = MDB_NOOVERWRITE;
 
-    // ops[0].key = DB_KEY_GEN_ID16(user_id);
-    // ops[0].val = DB_ENC_USER_ID2DATA(DB_VER, USER_ROLE_NONE, email_len, email);
-    // ops[0].flags = MDB_NOOVERWRITE | MDB_APPEND;
+    /* Initialize key = email */
+    void_store_init(1, &ops[1].key_store);
+    void_store_add(ops[1].key_store, (void*)email, (size_t)*email_len);
 
-    // /* 2) email -> id */
-    // ops[1].dbi   = DB->db_user_mail2id;
-    // ops[1].key   = DB_KEY_GEN_MAIL(email, email_len);
-    // ops[1].val   = DB_ENC_USER_MAIL2ID(user_id);
-    // ops[1].flags = MDB_NOOVERWRITE;
+    /* Initialize val = id */
+    void_store_init(1, &ops[1].val_store);
+    void_store_add(ops[1].val_store, (void*)user_id, DB_UUID_SIZE);
 
-    // // /* 3) id -> password */
-    // // ops[2].dbi   = DB->db_user_id2pw;
-    // ops[2].key   = DB_KEY_ID16(user_id);
-    // ops[2].val   = DB_ENC_SPAN(pwrec, pwrec_sz);
-    // ops[2].flags = MDB_NOOVERWRITE;
+    /* DBI id2pwd */
 
-    // *n_ops = N_OPERATIONS;
+    *n_ops      = N_OPERATIONS;
+    *operations = ops;
     return 0;
 }
 
@@ -150,54 +165,16 @@ int db_user_register_new(uint8_t* email_len, const char* email,
 
     /* Prepare the operations data */
     DB_operation_t* ops   = NULL;
-    int             n_ops = 0;
+    size_t          n_ops = 0;
+    fprintf(stdout, "[db_user] register new client: email %s, elen %u\n", email, *email_len);
+    /* create operations to add user */
+    int ret = user_register_new_ops(&ops, &n_ops, email_len, email, &user_id
+                                    /*, const void *pwrec, size_t pwrec_sz*/);
+    if(ret != 0) return ret;
 
-    int rc = user_register_new_ops(&ops, &n_ops, email_len, email, &user_id
-                                   /*, const void *pwrec, size_t pwrec_sz*/);
+    ret = exec_ops(ops, &n_ops);
 
-retry:
-    size_t failed = (size_t)-1;
-
-    /* Initialize the transaction */
-    MDB_txn* txn = NULL;
-
-    rc = mdb_txn_begin(DB->env, NULL, 0, &txn);
-    if(rc != MDB_SUCCESS) return db_map_mdb_err(rc);
-
-    /* Reserve the space in DB for later writing */
-    rc = db_put_reserve(txn, ops, n_ops, &failed);
-    if(rc != MDB_SUCCESS)
-    {
-        mdb_txn_abort(txn);
-        if(rc == MDB_MAP_FULL)
-        {
-            int gr = db_env_mapsize_expand();
-            if(gr != 0) return db_map_mdb_err(gr);
-            goto retry;
-        }
-
-        return db_map_mdb_err(rc);
-    }
-
-    /* write the reserved space */
-    rc = db_put_write_reserved(ops, n_ops);
-    if(rc != 0)
-    {
-        return rc;
-    }
-
-    /* Commit the transaction */
-    rc = mdb_txn_commit(txn);
-    if(rc == MDB_MAP_FULL)
-    {
-        printf("Nok mdb_txn_commit\n");
-        int gr = db_env_mapsize_expand();
-        if(gr != 0) return db_map_mdb_err(gr);
-        goto retry;
-    }
-    if(rc != MDB_SUCCESS) return db_map_mdb_err(rc);
-
-    return rc;
+    return db_map_mdb_err(ret);
 }
 
 // /** Look up a user by id and optionally return email. */
@@ -274,20 +251,20 @@ retry:
 //         }
 
 //         MDB_val k = {0}, v = {0};
-//         int     rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST);
-//         if(rc == MDB_NOTFOUND)
+//         int     ret = mdb_cursor_get(cur, &k, &v, MDB_FIRST);
+//         if(ret == MDB_NOTFOUND)
 //         {
 //             mdb_cursor_close(cur);
 //             free(ids_sorted);
 //             mdb_txn_abort(txn);
-//             return db_map_mdb_err(rc);
+//             return db_map_mdb_err(ret);
 //         }
-//         if(rc != MDB_SUCCESS)
+//         if(ret != MDB_SUCCESS)
 //         {
 //             mdb_cursor_close(cur);
 //             free(ids_sorted);
 //             mdb_txn_abort(txn);
-//             return db_map_mdb_err(rc);
+//             return db_map_mdb_err(ret);
 //         }
 
 //         for(size_t i = 0; i < uniq; ++i)
@@ -302,13 +279,13 @@ retry:
 //                             : (k.mv_size < DB_UUID_SIZE ? -1 : 1);
 //                 if(cmp >= 0) break;
 
-//                 rc = mdb_cursor_get(cur, &k, &v, MDB_NEXT);
-//                 if(rc != MDB_SUCCESS)
+//                 ret = mdb_cursor_get(cur, &k, &v, MDB_NEXT);
+//                 if(ret != MDB_SUCCESS)
 //                 {
 //                     mdb_cursor_close(cur);
 //                     free(ids_sorted);
 //                     mdb_txn_abort(txn);
-//                     return db_map_mdb_err(rc);
+//                     return db_map_mdb_err(ret);
 //                 }
 //             }
 
@@ -324,8 +301,8 @@ retry:
 //             /* prefetch for next iteration (optional) */
 //             if(i + 1 < uniq)
 //             {
-//                 rc = mdb_cursor_get(cur, &k, &v, MDB_NEXT);
-//                 if(rc != MDB_SUCCESS && rc != MDB_NOTFOUND)
+//                 ret = mdb_cursor_get(cur, &k, &v, MDB_NEXT);
+//                 if(ret != MDB_SUCCESS && ret != MDB_NOTFOUND)
 //                 {
 //                     mdb_cursor_close(cur);
 //                     free(ids_sorted);
@@ -596,8 +573,8 @@ retry:
 
 //     size_t  n = 0;
 //     MDB_val k = {0}, v = {0};
-//     for(int rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST); rc == MDB_SUCCESS;
-//         rc     = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
+//     for(int ret = mdb_cursor_get(cur, &k, &v, MDB_FIRST); ret == MDB_SUCCESS;
+//         ret     = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
 //     {
 //         if(k.mv_size != DB_UUID_SIZE) continue;
 //         if(n < *inout_count_max && out_ids)
@@ -626,8 +603,8 @@ retry:
 //     }
 
 //     MDB_val k = {0}, v = {0};
-//     for(int rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST); rc == MDB_SUCCESS;
-//         rc     = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
+//     for(int ret = mdb_cursor_get(cur, &k, &v, MDB_FIRST); ret == MDB_SUCCESS;
+//         ret     = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
 //     {
 //         if(k.mv_size != DB_UUID_SIZE) continue;
 
@@ -663,8 +640,8 @@ retry:
 //     }
 
 //     MDB_val k = {0}, v = {0};
-//     for(int rc = mdb_cursor_get(cur, &k, &v, MDB_FIRST); rc == MDB_SUCCESS;
-//         rc     = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
+//     for(int ret = mdb_cursor_get(cur, &k, &v, MDB_FIRST); ret == MDB_SUCCESS;
+//         ret     = mdb_cursor_get(cur, &k, &v, MDB_NEXT))
 //     {
 //         if(k.mv_size != DB_UUID_SIZE) continue;
 
@@ -694,8 +671,8 @@ retry:
 
 //     /* Resolve recipient once (outside txn ok; id is stable). */
 //     {
-//         int rc = db_user_find_by_email(email, target);
-//         if(rc != 0) return rc; /* -ENOENT / -EIO / -EINVAL */
+//         int ret = db_user_find_by_email(email, target);
+//         if(ret != 0) return ret; /* -ENOENT / -EIO / -EINVAL */
 //     }
 
 //     /* No-op if trying to share to self */
@@ -709,13 +686,13 @@ retry:
 //     {
 //         MDB_val k  = {.mv_size = DB_UUID_SIZE, .mv_data = (void*)data_id};
 //         MDB_val v  = {0};
-//         int     rc = mdb_get(txn, DB->db_data_id2meta, &k, &v);
-//         if(rc == MDB_NOTFOUND)
+//         int     ret = mdb_get(txn, DB->db_data_id2meta, &k, &v);
+//         if(ret == MDB_NOTFOUND)
 //         {
 //             mdb_txn_abort(txn);
 //             return -ENOENT;
 //         }
-//         if(rc != MDB_SUCCESS || v.mv_size != sizeof(DataMeta))
+//         if(ret != MDB_SUCCESS || v.mv_size != sizeof(DataMeta))
 //         {
 //             mdb_txn_abort(txn);
 //             return -EIO;
@@ -724,8 +701,8 @@ retry:
 
 //     /* Policy (MVP): only OWNERS can share; recipients get VIEW; no re-share. */
 //     {
-//         int rc = acl_has_owner(txn, owner, data_id);
-//         if(rc != 0)
+//         int ret = acl_has_owner(txn, owner, data_id);
+//         if(ret != 0)
 //         {
 //             mdb_txn_abort(txn);
 //             return -EPERM;
@@ -734,26 +711,26 @@ retry:
 
 //     /* If recipient already has any access, we’re done (idempotent). */
 //     {
-//         int rc = acl_has_any(txn, target, data_id);
-//         if(rc == 0)
+//         int ret = acl_has_any(txn, target, data_id);
+//         if(ret == 0)
 //         {
 //             mdb_txn_abort(txn);
 //             return 0;
 //         }
-//         if(rc != -ENOENT)
+//         if(ret != -ENOENT)
 //         {
 //             mdb_txn_abort(txn);
-//             return rc;
+//             return ret;
 //         }
 //     }
 
 //     /* Grant VIEW to recipient (writes forward+reverse; idempotent). */
 //     {
-//         int rc = acl_grant_view(txn, target, data_id);
-//         if(rc != 0)
+//         int ret = acl_grant_view(txn, target, data_id);
+//         if(ret != 0)
 //         {
 //             mdb_txn_abort(txn);
-//             return rc;
+//             return ret;
 //         }
 //     }
 
@@ -833,22 +810,22 @@ retry:
 
 //     MDB_val k    = {.mv_size = DB_UUID_SIZE, .mv_data = userId};
 //     MDB_val oldv = {0};
-//     int     rc   = mdb_cursor_get(cur, &k, &oldv, MDB_SET_KEY);
-//     if(rc != MDB_SUCCESS)
+//     int     ret   = mdb_cursor_get(cur, &k, &oldv, MDB_SET_KEY);
+//     if(ret != MDB_SUCCESS)
 //     {
 //         mdb_cursor_close(cur);
 //         mdb_txn_abort(txn);
-//         return db_map_mdb_err(rc);
+//         return db_map_mdb_err(ret);
 //     }
 
 //     uint8_t ver = 0, old_role = 0, el = 0, sz = 0;
 //     char    email_buf[DB_EMAIL_MAX_LEN] = {0};
-//     rc = db_user_get_and_check_mem(&oldv, &ver, &old_role, &el, email_buf, &sz);
-//     if(rc != 0)
+//     ret = db_user_get_and_check_mem(&oldv, &ver, &old_role, &el, email_buf, &sz);
+//     if(ret != 0)
 //     {
 //         mdb_cursor_close(cur);
 //         mdb_txn_abort(txn);
-//         return db_map_mdb_err(rc);
+//         return db_map_mdb_err(ret);
 //     }
 
 //     /* no-op if same role */
@@ -861,12 +838,12 @@ retry:
 
 //     /* reserve space exactly equal to current record size */
 //     MDB_val newv = {.mv_size = sz, .mv_data = NULL};
-//     rc           = mdb_cursor_put(cur, &k, &newv, MDB_CURRENT | MDB_RESERVE);
-//     if(rc != MDB_SUCCESS)
+//     ret           = mdb_cursor_put(cur, &k, &newv, MDB_CURRENT | MDB_RESERVE);
+//     if(ret != MDB_SUCCESS)
 //     {
 //         mdb_cursor_close(cur);
 //         mdb_txn_abort(txn);
-//         return db_map_mdb_err(rc);
+//         return db_map_mdb_err(ret);
 //     }
 
 //     /* rewrite record in-place */

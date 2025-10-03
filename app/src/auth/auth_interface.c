@@ -33,6 +33,8 @@ int auth_register_new(const char* email_in /* const char *pwd_in, */)
 
     if(rc != 0)
     {
+        fprintf(stderr, "[auth_interface] db_user_register_new failed %d \n",
+                rc);
         return rc;
     }
 

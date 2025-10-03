@@ -68,11 +68,6 @@ typedef uint8_t user_role_t;
  ****************************************************************************
  */
 
-/* USER ROLES */
-#define USER_ROLE_NONE      0u
-#define USER_ROLE_VIEWER    (1u << 0)
-#define USER_ROLE_PUBLISHER (1u << 1)
-
 /* PUBLIC */
 
 int db_map_mdb_err(int mdb_rc);

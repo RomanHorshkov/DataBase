@@ -62,7 +62,7 @@ void void_store_close(void_store_t* st)
 
 int void_store_add(void_store_t* st, void* elem, size_t elem_size)
 {
-    if(!st || (st->n_elements <= st->n_max)) return -1;
+    if(!st || (st->n_elements >= st->n_max)) return -1;
 
     /* set element ptr */
     st->elements[st->n_elements]      = elem;
@@ -76,50 +76,31 @@ int void_store_add(void_store_t* st, void* elem, size_t elem_size)
     return 0;
 }
 
-size_t void_store_size(const void_store_t* st)
+void* void_store_get(const void_store_t *st, size_t idx)
 {
-    if(!st || !st->elements || !st->element_size) return 0;
+    return st->elements[idx];
+}
 
-    size_t total = 0;
-    for(size_t i = 0; i < st->n_elements; ++i)
-    {
-        const void*  p = st->elements[i];
-        const size_t n = st->element_size[i];
-
-        if(!p || n <= 0) return 0;
-
-        total += n;
-    }
-
-    return total;
+size_t void_store_size(const void_store_t *st)
+{
+    return st ? st->tot_size : 0;
 }
 
 size_t void_store_memcpy(void* dst, size_t dst_len, const void_store_t* st)
 {
-    if(!dst || !st || !st->elements || dst_len == 0) return 0;
-
-    if(void_store_size(st) == 0) return 0;
-
-    /* Copy elements in order;
-    caller guarantees no overlap with dst. */
+    if(!dst || !st || !st->elements || !st->element_size) return 0;
+    size_t need = void_store_size(st);
+    if(need == 0 || need > dst_len) return 0;
     unsigned char* out = (unsigned char*)dst;
     size_t         off = 0;
-
     for(size_t i = 0; i < st->n_elements; ++i)
     {
-        const void*  p = st->elements ? st->elements[i] : NULL;
-        const size_t n = st->element_size ? st->element_size[i] : 0;
-
-        if(!p || n <= 0) return 0;
-
-        /* Capacity already checked globally, but keep a defensive guard. */
-        if(n > dst_len - off) return 0;
-
-        memcpy(
-            out + off, p,
-            n); /* Undefined if regions overlap: caller must avoid overlap. */
+        const void* p = st->elements[i];
+        size_t      n = st->element_size[i];
+        if(!p || n == 0) return 0;
+        memcpy(out + off, p, n);
         off += n;
     }
 
-    return off;
+    return off == need ? off : 0;
 }

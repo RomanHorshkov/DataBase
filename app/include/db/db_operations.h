@@ -25,15 +25,15 @@ typedef enum
 
 typedef struct
 {
-    DB_operation_type_t op_type;
-    MDB_dbi             dbi; /* db in which operate */
+    DB_operation_type_t type;
+    MDB_dbi             dbi;   /* db in which operate */
     void_store_t*       key_store;
     void_store_t*       val_store;
+    unsigned            flags; /* MDB_NOOVERWRITE | MDB_APPEND */
     // MDB_val key;
     // MDB_val val;
     // DB_key_t key;
     // DB_val_t val;
-    // unsigned flags; /* extras: MDB_NOOVERWRITE | MDB_APPEND */
 
     /* filled by the reserve pass */
     void*  dst;     /* reserved pointer returned by mdb_put */
