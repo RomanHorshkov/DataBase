@@ -14,15 +14,16 @@
 #include "ctype.h"
 
 /****************************************************************************
+ * PRIVATE DEFINES
+ ****************************************************************************
+ */
+
+/****************************************************************************
  * PRIVATE STUCTURED VARIABLES
  ****************************************************************************
  */
 
-// /**
-//  * DB USER
-//  */
-
-// /* user_id2data user data structure to store in db */
+// /* user_id2meta user data structure to store in db */
 // typedef struct __attribute__((packed))
 // {
 //     uint8_t     ver;       /* 1 byte version for future evolution */
@@ -31,21 +32,21 @@
 //     char*       email;     /* variable-length not-terminated email */
 // } DB_user_id2data_packed;
 
-// /* user_email2id id data structure to store in db */
-// typedef struct __attribute__((packed))
-// {
-//     uint8_t id[DB_UUID_SIZE]
-// } db_user_mail2id_packed_t;
-
 /****************************************************************************
  * PRIVATE VARIABLES
  ****************************************************************************
  */
+/* None */
 
 /****************************************************************************
  * PRIVATE FUNCTIONS PROTOTYPES
  ****************************************************************************
  */
+
+static int user_register_new_ops(DB_operation_t** operations, uint8_t* n_ops,
+                                 uint8_t* email_len, char* email,
+                                 uint8_t* user_id
+                                 /*, const void *pwrec, size_t pwrec_sz*/);
 
 // static size_t db_user_id2data_data_size(const void* p)
 // {
@@ -74,12 +75,6 @@
 //     // (uint8_t *)dst = *(uint8_t *)p;
 //     memcpy(dst, p, DB_UUID_SIZE);
 // }
-
-/****************************************************************************
- * PRIVATE DEFINES
- ****************************************************************************
- */
-
 // static int db_user_set_role(uint8_t userId[DB_UUID_SIZE], user_role_t role);
 
 // static void write_user_mem(uint8_t* dst, const char* email, uint8_t email_len,
@@ -96,9 +91,9 @@
  ****************************************************************************
  */
 
-static int user_register_new_ops(DB_operation_t** operations, size_t* n_ops,
-                                 uint8_t* email_len, const char* email,
-                                 const uint8_t* user_id
+static int user_register_new_ops(DB_operation_t** operations, uint8_t* n_ops,
+                                 uint8_t* email_len, char* email,
+                                 uint8_t* user_id
                                  /*, const void *pwrec, size_t pwrec_sz*/)
 {
     /* build the operations to be executed on the whole db
@@ -110,7 +105,7 @@ static int user_register_new_ops(DB_operation_t** operations, size_t* n_ops,
 
     static uint8_t db_version   = DB_VER;
     static uint8_t user_role    = USER_ROLE_NONE;
-    size_t         N_OPERATIONS = 2;
+    uint8_t        N_OPERATIONS = 2;
 
     DB_operation_t* ops =
         (DB_operation_t*)calloc(N_OPERATIONS, sizeof(DB_operation_t));
@@ -125,16 +120,16 @@ static int user_register_new_ops(DB_operation_t** operations, size_t* n_ops,
     ops[0].type  = DB_OPERATION_PUT_RESERVE;
     ops[0].dbi   = DB->db_user_id2meta;
     ops[0].flags = MDB_NOOVERWRITE | MDB_APPEND;
-    
+
     /* Initialize key = id */
     void_store_init(1, &ops[0].key_store); /* user id has 1 ptr to id*/
     void_store_add(ops[0].key_store, (void*)user_id, DB_UUID_SIZE);
-    
+
     /* Initialize meta = ver, role, elen, email */
     void_store_init(4, &ops[0].val_store);
-    void_store_add(ops[0].val_store, &db_version, sizeof(uint8_t));
-    void_store_add(ops[0].val_store, &user_role, sizeof(uint8_t));
-    void_store_add(ops[0].val_store, email_len, sizeof(uint8_t));
+    void_store_add(ops[0].val_store, &db_version, sizeof db_version);
+    void_store_add(ops[0].val_store, &user_role, sizeof user_role);
+    void_store_add(ops[0].val_store, email_len, sizeof *email_len);
     void_store_add(ops[0].val_store, email, sizeof(uint8_t));
 
     /* DBI email2id */
@@ -157,18 +152,18 @@ static int user_register_new_ops(DB_operation_t** operations, size_t* n_ops,
     return 0;
 }
 
-int db_user_register_new(uint8_t* email_len, const char* email,
-                         const uint8_t* user_id
+int db_user_register_new(uint8_t* email_len, char* email, uint8_t* user_id
                          /*, const void *pwrec, size_t pwrec_sz*/)
 {
     if(!email || !user_id /* || !pwrec*/) return -EINVAL;
 
     /* Prepare the operations data */
     DB_operation_t* ops   = NULL;
-    size_t          n_ops = 0;
-    fprintf(stdout, "[db_user] register new client: email %s, elen %u\n", email, *email_len);
+    uint8_t         n_ops = 0;
+    fprintf(stdout, "[db_user] registering new client: email %s, elen %u\n",
+            email, *email_len);
     /* create operations to add user */
-    int ret = user_register_new_ops(&ops, &n_ops, email_len, email, &user_id
+    int ret = user_register_new_ops(&ops, &n_ops, email_len, email, user_id
                                     /*, const void *pwrec, size_t pwrec_sz*/);
     if(ret != 0) return ret;
 

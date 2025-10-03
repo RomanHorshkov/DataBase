@@ -38,7 +38,7 @@ int void_store_init(size_t len, void_store_t** st)
     /* If either allocation failed, clean up and return an invalid store */
     if(!store->elements || !store->element_size)
     {
-        void_store_close(store);
+        free(store);
         return -1;
     }
 
@@ -51,13 +51,14 @@ int void_store_init(size_t len, void_store_t** st)
  * Release internal arrays owned by the store and reset fields.
  * Does not free elements pointed to by el[i]; that remains caller-owned.
  */
-void void_store_close(void_store_t* st)
+void void_store_close(void_store_t** st)
 {
-    if(!st) return;
-
-    free(st->elements);
-    free(st->element_size);
-    free(st);
+    if(!st || !*st) return;
+    void_store_t* store = *st;
+    free(store->elements);
+    free(store->element_size);
+    free(store);
+    *st = NULL;  // avoid dangling pointer
 }
 
 int void_store_add(void_store_t* st, void* elem, size_t elem_size)
@@ -76,12 +77,12 @@ int void_store_add(void_store_t* st, void* elem, size_t elem_size)
     return 0;
 }
 
-void* void_store_get(const void_store_t *st, size_t idx)
+void* void_store_get(const void_store_t* st, size_t idx)
 {
     return st->elements[idx];
 }
 
-size_t void_store_size(const void_store_t *st)
+size_t void_store_size(const void_store_t* st)
 {
     return st ? st->tot_size : 0;
 }

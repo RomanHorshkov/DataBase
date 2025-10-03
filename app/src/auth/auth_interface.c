@@ -8,12 +8,19 @@
  */
 
 #include "auth_interface.h"
-#include "utils_interface.h" /* sanitize_email */
+#include "utils_interface.h" /* sanitize_email, uuid */
 
 #include "db_interface.h"
 
-int auth_register_new(const char* email_in /* const char *pwd_in, */)
+int auth_register_new(char* email_in /* const char *pwd_in, */)
 {
+    /* open DB */
+    if(db_open("./med", 1ULL << 30) != 0)
+    {
+        puts("db_open failed");
+        return -1;
+    }
+
     if(!email_in || email_in[0] == '\0') return -EINVAL;
 
     /* sanitize email and get length without \0 */
@@ -29,7 +36,7 @@ int auth_register_new(const char* email_in /* const char *pwd_in, */)
 
     /* Register the new user on the DB */
     int rc = db_user_register_new(&elen, email_in,
-                                  user_id /*, pwrec, sizeof pwrec*/);
+                                  (uint8_t*)user_id /*, pwrec, sizeof pwrec*/);
 
     if(rc != 0)
     {

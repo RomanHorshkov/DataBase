@@ -1,0 +1,39 @@
+#include <sodium.h>
+
+int init_crypto(void)
+{
+    if(sodium_init() < 0) return -1;  // libsodium not available
+    return 0;
+}
+
+int hash_password(const char* pwd, char out[crypto_pwhash_STRBYTES])
+{
+    if(crypto_pwhash_str(out, pwd, strlen(pwd),
+                         crypto_pwhash_OPSLIMIT_INTERACTIVE,
+                         crypto_pwhash_MEMLIMIT_INTERACTIVE) != 0)
+    {
+        return -1;  // out of memory
+    }
+    return 0;
+}
+
+int verify_password(const char* pwd, const char* stored)
+{
+    return crypto_pwhash_str_verify(stored, pwd, strlen(pwd)) == 0 ? 0 : -1;
+}
+
+int maybe_rehash(char* stored)
+{
+    if(crypto_pwhash_str_needs_rehash(stored,
+                                      crypto_pwhash_OPSLIMIT_INTERACTIVE,
+                                      crypto_pwhash_MEMLIMIT_INTERACTIVE) == 1)
+    {
+        char newhash[crypto_pwhash_STRBYTES];
+        if(hash_password(/* same pwd just verified */, newhash) == 0)
+        {
+            // replace stored with newhash atomically in DB
+            return 1;  // rehashed
+        }
+    }
+    return 0;          // not needed or failed to rehash
+}

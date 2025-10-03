@@ -64,7 +64,7 @@ int void_store_init(size_t len, void_store_t** st);
  *
  * @param st Pointer to the store to close; ignored if NULL.
  */
-void void_store_close(void_store_t* st);
+void void_store_close(void_store_t** st);
 
 /**
  * @brief Append an element pointer and its size to the end of the store.
@@ -81,8 +81,7 @@ void void_store_close(void_store_t* st);
  */
 int void_store_add(void_store_t* st, void* elem, size_t elem_size);
 
-
-void* void_store_get(const void_store_t *st, size_t idx);
+void* void_store_get(const void_store_t* st, size_t idx);
 
 /**
  * @brief Compute total byte length of all non-NULL elements.

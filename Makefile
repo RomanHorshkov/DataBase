@@ -43,15 +43,15 @@ endif
 
 # --- Paths ---
 APP_NAME     := db_lmdb_demo
-TEST_NAME    := db_tests
+# TEST_NAME    := db_tests
 
 APP_DIR   := app
 APP_INC   := $(APP_DIR)/include
 APP_SRC   := $(APP_DIR)/src
 
-TEST_DIR  := tests
-TEST_INC  := $(TEST_DIR)/include
-TEST_SRC  := $(TEST_DIR)/src
+# TEST_DIR  := tests
+# TEST_INC  := $(TEST_DIR)/include
+# TEST_SRC  := $(TEST_DIR)/src
 
 BIN_DIR   := build/bin
 
@@ -85,20 +85,20 @@ endif
 # ------------------------------------------------------------
 # Auto-discover include subfolders under app/include and tests/include
 INC_APP_DIRS  := $(shell find $(APP_INC)  -type d 2>/dev/null)
-INC_TEST_DIRS := $(shell [ -d $(TEST_INC) ] && find $(TEST_INC) -type d 2>/dev/null || true)
+# INC_TEST_DIRS := $(shell [ -d $(TEST_INC) ] && find $(TEST_INC) -type d 2>/dev/null || true)
 
 CPPFLAGS := -D_GNU_SOURCE \
-            $(addprefix -I,$(INC_APP_DIRS) $(INC_TEST_DIRS)) \
+            $(addprefix -I,$(INC_APP_DIRS)) \
             $(OPENSSL_CFLAGS) $(LMDB_CFLAGS) $(SODIUM_CFLAGS)
 
-CSTD     := -std=c11
-WARN     := -Wall -Wextra -Wshadow -Wconversion -Wpointer-arith -Wcast-qual -Wwrite-strings
+CSTD    := -std=c11
+WARN    := -Wall -Wextra -Wshadow -Wconversion -Wpointer-arith -Wcast-qual -Wwrite-strings
 DEPFLAGS := -MMD -MP
 
 ifeq ($(MODE),release)
     CFLAGS  := $(CSTD) -O2 $(WARN) -fno-plt
     LDFLAGS :=
-  # Enable if you want:
+  # Enable want:
   # CFLAGS  += -flto
   # LDFLAGS += -flto
 else ifeq ($(MODE),debug)
@@ -107,40 +107,40 @@ else ifeq ($(MODE),debug)
 else ifeq ($(MODE),asan)
     CFLAGS  := $(CSTD) -O1 -g3 $(WARN) -fsanitize=address,undefined -fno-omit-frame-pointer
     LDFLAGS := -fsanitize=address,undefined
-else ifeq ($(MODE),ubsan)
-    CFLAGS  := $(CSTD) -O1 -g3 $(WARN) -fsanitize=undefined -fno-omit-frame-pointer
-    LDFLAGS := -fsanitize=undefined
+# else ifeq ($(MODE),ubsan)
+#     CFLAGS  := $(CSTD) -O1 -g3 $(WARN) -fsanitize=undefined -fno-omit-frame-pointer
+#     LDFLAGS := -fsanitize=undefined
 else
-    $(error Unknown MODE '$(MODE)'. Use: release, debug, asan, ubsan)
+    $(error Unknown MODE '$(MODE)'. Use: release, debug, asan)
 endif
 
 LDLIBS := $(OPENSSL_LIBS) $(LMDB_LIBS) $(SODIUM_LIBS)
 
 # ------------------------------------------------------------
 # Source discovery
-# ------------------------------------------------------------# --- Source discovery (fixed) ---
+# ------------------------------------------------------------#
 SRCS_APP  := $(shell find $(APP_SRC)  -type f -name '*.c')
 SRCS_MAIN := $(filter %/main.c,$(SRCS_APP))
 SRCS_CORE := $(filter-out $(SRCS_MAIN),$(SRCS_APP))
 
-SRCS_TEST := $(shell find $(TEST_SRC) -type f -name '*.c')
-# (Optional belt-and-suspenders) ensure app's main never lands in tests:
-SRCS_TEST := $(filter-out $(APP_SRC)/main.c,$(SRCS_TEST))
+# SRCS_TEST := $(shell find $(TEST_SRC) -type f -name '*.c')
+# # (Optional belt-and-suspenders) ensure app's main never lands in tests:
+# SRCS_TEST := $(filter-out $(APP_SRC)/main.c,$(SRCS_TEST))
 
 # Mirror tree under obj/
 OBJS_CORE := $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS_CORE))
 OBJS_MAIN := $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS_MAIN))
-OBJS_TEST := $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS_TEST))
+# OBJS_TEST := $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS_TEST))
 
-DEPS := $(OBJS_CORE:.o=.d) $(OBJS_MAIN:.o=.d) $(OBJS_TEST:.o=.d)
+DEPS := $(OBJS_CORE:.o=.d) $(OBJS_MAIN:.o=.d) # $(OBJS_TEST:.o=.d)
 
 APP_BIN  := $(BIN_DIR)/$(APP_NAME)
-TEST_BIN := $(BIN_DIR)/$(TEST_NAME)
+# TEST_BIN := $(BIN_DIR)/$(TEST_NAME)
 
 # ------------------------------------------------------------
 # Phony targets
 # ------------------------------------------------------------
-.PHONY: all clean distclean test run lib print-vars \
+.PHONY: all clean run lib print-vars \
         debug asan ubsan release
 
 all: $(APP_BIN) $(TEST_BIN)
@@ -167,14 +167,14 @@ print-vars:
 	@echo "MODE=$(MODE)"
 	@echo "BUILD_DIR=$(BUILD_DIR)"
 	@echo "APP_BIN=$(APP_BIN)"
-	@echo "TEST_BIN=$(TEST_BIN)"
-	@echo "SRCS_CORE count=$(words $(SRCS_CORE))  SRCS_TEST count=$(words $(SRCS_TEST))"
+# 	@echo "TEST_BIN=$(TEST_BIN)"
+	@echo "SRCS_CORE count=$(words $(SRCS_CORE))"
+#   "  SRCS_TEST count=$(words $(SRCS_TEST))"
 
 clean:
-	$(Q)rm -rf $(BUILD_DIR)
-
-distclean: clean
+	$(Q)rm -rf med build 2>/dev/null || true
 	$(Q)rm -f blob_* .test* 2>/dev/null || true
+
 
 # ------------------------------------------------------------
 # Build rules

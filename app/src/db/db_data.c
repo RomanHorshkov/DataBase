@@ -45,8 +45,7 @@ typedef struct __attribute__((packed))
  ****************************************************************************
  */
 
-static int      db_user_get_role(const uint8_t id[DB_UUID_SIZE],
-                                 user_role_t*  out_role);
+static int db_user_get_role(uint8_t id[DB_UUID_SIZE], user_role_t* out_role);
 static uint64_t now_secs(void);
 
 static inline void write_data_meta(void* dst, const Sha256* digest,
@@ -168,7 +167,7 @@ retry_chunk:
         return db_map_mdb_err(mrc);
     }
     /* generate new id, write it into reserved sha->id slot */
-    uuid_v7(data_id);
+    uuid_gen(data_id);
 
     MDB_val datak = {.mv_size = DB_UUID_SIZE, .mv_data = (void*)data_id};
     MDB_val datav = {.mv_size = sizeof(DataMeta), .mv_data = NULL};
@@ -226,8 +225,7 @@ retry_chunk:
     return 0;
 }
 
-int db_data_delete(const uint8_t owner[DB_UUID_SIZE],
-                   const uint8_t data_id[DB_UUID_SIZE])
+int db_data_delete(uint8_t owner[DB_UUID_SIZE], uint8_t data_id[DB_UUID_SIZE])
 {
     if(!owner || !data_id) return -EINVAL;
 
@@ -303,8 +301,7 @@ int db_data_delete(const uint8_t owner[DB_UUID_SIZE],
  ****************************************************************************
  */
 
-static int db_user_get_role(const uint8_t id[DB_UUID_SIZE],
-                            user_role_t*  out_role)
+static int db_user_get_role(uint8_t id[DB_UUID_SIZE], user_role_t* out_role)
 {
     if(!id || !out_role) return -EINVAL;
 

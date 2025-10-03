@@ -106,90 +106,14 @@
 //     }
 //     return db_map_mdb_err(rc);
 // }
-static int op_write_reserved(MDB_txn* txn, DB_operation_t* operations,
-                             uint8_t* n_ops)
-{
-    int ret = -1;
-    for(size_t i = 0; i < *n_ops; i++)
-    {
-        /* get the single operation */
-        DB_operation_t* op = &operations[i];
 
-        switch(op->type)
-        {
-            case DB_OPERATION_PUT_RESERVE:
+static void free_ops(DB_operation_t** ops, uint8_t* n_ops);
 
-                /* must be set by reserve pass */
-                if(!op->dst || op->dst_len <= 0) return -EFAULT;
+static int op_write_reserved(DB_operation_t* operations, uint8_t* n_ops);
 
-                /* write all the data */
-                ret = void_store_memcpy(op->dst, op->dst_len, op->val_store);
-                if(ret == 0)
-                {
-                    return ret;
-                }
-                break;
+static int op_reserve(MDB_txn* txn, DB_operation_t* op);
 
-            default:
-                ret = -1;
-                break;
-        }
-    }
-
-    return ret;
-}
-
-static int op_reserve(MDB_txn* txn, DB_operation_t* op)
-{
-    size_t klen = void_store_size(op->key_store);
-    size_t vlen = void_store_size(op->val_store);
-    if (klen == 0 || vlen == 0) return -EINVAL;
-
-    /* Create key buffer */
-    void *kbuf = calloc(1, sizeof(void*));
-    if (!kbuf) return -ENOMEM;
-    if (void_store_memcpy(kbuf, klen, op->key_store) != klen) {
-        free(kbuf);
-        return -EFAULT;
-    }
-
-    // MDB_val k = { .mv_size = klen, .mv_data = void_store_get(op->key_store, 0) };
-    MDB_val k = { .mv_size = klen, .mv_data = kbuf };
-    MDB_val v = { .mv_size = vlen, .mv_data = NULL }; // reserve space for value only
-
-    // 2) Reserve value bytes; on success v.mv_data points to LMDB-owned space
-    int ret = mdb_put(txn, op->dbi, &k, &v, op->flags | MDB_RESERVE);
-    free(kbuf);
-    if(ret != MDB_SUCCESS)
-    {
-        fprintf(stderr, "[dp_operations] op_reserve %d\n", ret);
-        return ret;
-    }
-
-    // // 3) Write value payload into reserved buffer
-    // if (void_store_memcpy(v.mv_data, v.mv_size, op->val_store) != v.mv_size)
-    // {
-    //     return -EFAULT;
-    // }
-
-    /* remember where to write later */
-    op->dst     = v.mv_data;
-    op->dst_len = v.mv_size;
-
-    return ret;
-}
-
-static int exec_op(MDB_txn* txn, DB_operation_t* op)
-{
-    switch(op->type)
-    {
-        case DB_OPERATION_PUT_RESERVE:
-            return op_reserve(txn, op);
-
-        default:
-            return -1;
-    }
-}
+static int exec_op(MDB_txn* txn, DB_operation_t* op);
 
 int exec_ops(DB_operation_t* ops, uint8_t* n_ops)
 {
@@ -225,7 +149,7 @@ retry:
         }
     }
 
-    ret = op_write_reserved(txn, ops, n_ops);
+    ret = op_write_reserved(ops, n_ops);
     if(ret == 0) goto fail;
 
     /* Commit the transaction */
@@ -234,14 +158,102 @@ retry:
     {
         /* txn aborted by commit */
         ret = db_env_mapsize_expand();
-        if(ret != 0) goto fail;
+        if(ret != 0)
+        {
+            fprintf(stderr,
+                    "[dp_operations] exec_ops failed \
+                    expanding mapsize %d\n",
+                    ret);
+            goto fail;
+        }
         goto retry;
     }
-    if(ret != MDB_SUCCESS) return db_map_mdb_err(ret);
+
+    /* free operations */
+    free_ops(&ops, n_ops);
 
     return ret;
 fail:
-    fprintf(stderr, "[dp_operations] exec_ops failed %d\n", ret);
     mdb_txn_abort(txn);
+    free_ops(&ops, n_ops);
     return ret;
+}
+
+static void free_ops(DB_operation_t** ops, uint8_t* n_ops)
+{
+    if(!ops || !*ops || !n_ops) return;
+    DB_operation_t* arr = *ops;
+    for(size_t i = 0; i < *n_ops; i++)
+    {
+        void_store_close(&arr[i].key_store);
+        void_store_close(&arr[i].val_store);
+    }
+    free(arr);
+    *ops = NULL;
+}
+
+static int op_write_reserved(DB_operation_t* operations, uint8_t* n_ops)
+{
+    int ret = -1;
+    for(size_t i = 0; i < *n_ops; i++)
+    {
+        /* get the single operation */
+        DB_operation_t* op = &operations[i];
+        if(op->type != DB_OPERATION_PUT_RESERVE) continue;
+
+        /* must be set by reserve pass */
+        if(!op->dst || op->dst_len <= 0) return -EFAULT;
+
+        size_t wrote = void_store_memcpy(op->dst, op->dst_len, op->val_store);
+        if(wrote != op->dst_len) return -EFAULT;
+    }
+
+    return ret;
+}
+
+static int op_reserve(MDB_txn* txn, DB_operation_t* op)
+{
+    size_t klen = void_store_size(op->key_store);
+    size_t vlen = void_store_size(op->val_store);
+    if(klen == 0 || vlen == 0) return -EINVAL;
+
+    /* Create key buffer */
+    void* kbuf = malloc(klen);
+    if(!kbuf) return -ENOMEM;
+    if(void_store_memcpy(kbuf, klen, op->key_store) != klen)
+    {
+        free(kbuf);
+        return -EFAULT;
+    }
+
+    // MDB_val k = { .mv_size = klen, .mv_data = void_store_get(op->key_store, 0) };
+    MDB_val k = {.mv_size = klen, .mv_data = kbuf};
+    MDB_val v = {.mv_size = vlen, .mv_data = NULL};
+
+    /* Reserve value bytes; on success v.mv_data points to LMDB-owned space */
+    int ret = mdb_put(txn, op->dbi, &k, &v, op->flags | MDB_RESERVE);
+    free(kbuf);
+    if(ret != MDB_SUCCESS)
+    {
+        fprintf(stderr, "[dp_operations] op_reserve %d\n", ret);
+        return ret;
+    }
+
+    /* remember where to write later */
+    op->dst     = v.mv_data;
+    op->dst_len = v.mv_size;
+
+    return ret;
+}
+
+static int exec_op(MDB_txn* txn, DB_operation_t* op)
+{
+    switch(op->type)
+    {
+        case DB_OPERATION_PUT_RESERVE:
+            return op_reserve(txn, op);
+
+        default:
+            return -1;
+    }
 }

@@ -83,33 +83,25 @@ int main(void)
 {
     puts("=== DB smoke tests ===");
 
-    /* open DB */
-    if(db_open("./med", 1ULL << 30) != 0)
-    {
-        puts("db_open failed");
-        return 1;
-    }
-
     // /* create three blobs on disk */
     // int fd_shared = make_blob("./blob_shared.dcm", "shared-seed-001");
     // int fd_A      = make_blob("./blob_A.dcm", "unique-A");
     // int fd_B      = make_blob("./blob_B.dcm", "unique-B");
 
     /* 2) seed users */
-    char alice[]  = "alice@example.com";
-    char bob[]    = "bob@example.com";
-    char carol[]  = "carol@example.com";
-    char anton[]  = "anton@example.com";
-    char luana[]  = "luana@example.com";
-    char roman[]  = "roman@example.com";
-    char luca[]   = "luca@example.com";
-    char franco[] = "franco@example.com";
+    char alice[] = "alice@example.com";
+    char luana[] = "luana@example.com";
+    char roman[] = "roman@example.com";
+    // char luca[]   = "luca@example.com";
+    // char franco[] = "franco@example.com";
     // uint8_t UA[] = {0}, UB[] = {0},
     //         UC[] = {0}, UD[] = {0},
     //         UE[] = {0}, UF[] = {0},
     //         UG[] = {0}, UH[] = {0};
 
     CHECK(auth_register_new(alice));
+    CHECK(auth_register_new(roman));
+    CHECK(auth_register_new(luana));
 
     // CHECK(auth_register_new(alice, UA));
     // CHECK(db_add_user(bob, UB));
