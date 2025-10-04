@@ -27,8 +27,9 @@ extern "C"
  */
 
 /* ----------------------- Packed DB records -------------------------------- */
-#define DB_UUID_SIZE     16  /* UUID bytes sizes 128 bits */
-#define DB_EMAIL_MAX_LEN 128 /* Maximum length for email strings */
+#define DB_UUID_SIZE     16U  /* UUID bytes sizes 128 bits */
+#define DB_PWD_MAX_HASH_SIZE 128U /* password hash size */
+#define DB_EMAIL_MAX_LEN 128U /* Maximum length for email strings */
 #define DB_VER           0
 
 /****************************************************************************

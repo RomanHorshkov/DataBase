@@ -15,7 +15,9 @@ extern "C"
 {
 #endif
 
-int auth_register_new(char* email_in /* const char *pwd_in, */);
+int auth_login(char* email, char* pwd);
+
+int auth_register_new(char* email, char* pwd);
 
 #ifdef __cplusplus
 }

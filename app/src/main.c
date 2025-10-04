@@ -89,9 +89,12 @@ int main(void)
     // int fd_B      = make_blob("./blob_B.dcm", "unique-B");
 
     /* 2) seed users */
-    char alice[] = "alice@example.com";
-    char luana[] = "luana@example.com";
-    char roman[] = "roman@example.com";
+    char alice[]     = "alice@example.com";
+    char luana[]     = "luana@example.com";
+    char roman[]     = "roman@example.com";
+    char alice_pwd[] = "whatever";
+    char luana_pwd[] = "whatever1";
+    char roman_pwd[] = "whateverlwsrihgaqolr;wigh;arouh";
     // char luca[]   = "luca@example.com";
     // char franco[] = "franco@example.com";
     // uint8_t UA[] = {0}, UB[] = {0},
@@ -99,9 +102,12 @@ int main(void)
     //         UE[] = {0}, UF[] = {0},
     //         UG[] = {0}, UH[] = {0};
 
-    CHECK(auth_register_new(alice));
-    CHECK(auth_register_new(roman));
-    CHECK(auth_register_new(luana));
+    CHECK(auth_register_new(alice, alice_pwd));
+    CHECK(auth_register_new(roman, roman_pwd));
+    CHECK(auth_register_new(luana, luana_pwd));
+
+    char alice_pwd2[] = "whatever";
+    CHECK(auth_login(alice, alice_pwd2));
 
     // CHECK(auth_register_new(alice, UA));
     // CHECK(db_add_user(bob, UB));

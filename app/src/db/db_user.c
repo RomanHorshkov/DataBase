@@ -45,8 +45,7 @@
 
 static int user_register_new_ops(DB_operation_t** operations, uint8_t* n_ops,
                                  uint8_t* email_len, char* email,
-                                 uint8_t* user_id
-                                 /*, const void *pwrec, size_t pwrec_sz*/);
+                                 uint8_t* user_id, char* pwd_hash);
 
 // static size_t db_user_id2data_data_size(const void* p)
 // {
@@ -93,69 +92,101 @@ static int user_register_new_ops(DB_operation_t** operations, uint8_t* n_ops,
 
 static int user_register_new_ops(DB_operation_t** operations, uint8_t* n_ops,
                                  uint8_t* email_len, char* email,
-                                 uint8_t* user_id
-                                 /*, const void *pwrec, size_t pwrec_sz*/)
+                                 uint8_t* user_id, char* pwd_hash)
 {
-    /* build the operations to be executed on the whole db
-    for registering a new user:
-    insert new user email
-    insert new user metadata
-    TO DO: insert new user pwd
-    */
-
     static uint8_t db_version   = DB_VER;
     static uint8_t user_role    = USER_ROLE_NONE;
-    uint8_t        N_OPERATIONS = 2;
+    const uint8_t  N_OPERATIONS = 3;
 
     DB_operation_t* ops =
         (DB_operation_t*)calloc(N_OPERATIONS, sizeof(DB_operation_t));
-
     if(!ops)
     {
         fprintf(stderr, "[db_user] user_register_new_ops calloc failure\n");
-        return -EINVAL;
+        return -ENOMEM;
     }
 
-    /* DBi id2meta */
-    ops[0].type  = DB_OPERATION_PUT_RESERVE;
-    ops[0].dbi   = DB->db_user_id2meta;
-    ops[0].flags = MDB_NOOVERWRITE | MDB_APPEND;
+    /* --- op 0 : id2meta --- */
+    DB_operation_t* op = &ops[0];
 
     /* Initialize key = id */
-    void_store_init(1, &ops[0].key_store); /* user id has 1 ptr to id*/
-    void_store_add(ops[0].key_store, (void*)user_id, DB_UUID_SIZE);
+    if(void_store_init(1, &op->key_store) != 0)
+    {                                      /* adjust return check per API */
+        fprintf(stderr, "void_store_init failed\n");
+        ops_free(&ops,
+                 (uint8_t*)&(uint8_t){1}); /* best-effort free single init */
+        return -ENOMEM;
+    }
+    void_store_add(op->key_store, (void*)user_id, DB_UUID_SIZE);
 
     /* Initialize meta = ver, role, elen, email */
-    void_store_init(4, &ops[0].val_store);
-    void_store_add(ops[0].val_store, &db_version, sizeof db_version);
-    void_store_add(ops[0].val_store, &user_role, sizeof user_role);
-    void_store_add(ops[0].val_store, email_len, sizeof *email_len);
-    void_store_add(ops[0].val_store, email, sizeof(uint8_t));
+    if(void_store_init(4, &op->val_store) != 0)
+    {
+        fprintf(stderr, "void_store_init failed\n");
+        ops_free(&ops, (uint8_t*)&(uint8_t){1});
+        return -ENOMEM;
+    }
+    void_store_add(op->val_store, &db_version, sizeof db_version);
+    void_store_add(op->val_store, &user_role, sizeof user_role);
+    void_store_add(op->val_store, email_len, sizeof *email_len);
+    void_store_add(op->val_store, email, *email_len);
 
-    /* DBI email2id */
-    ops[1].type  = DB_OPERATION_PUT_RESERVE;
-    ops[1].dbi   = DB->db_user_mail2id;
-    ops[1].flags = MDB_NOOVERWRITE;
+    ops_prepare_op(op, DB_OPERATION_PUT, DB->db_user_id2meta,
+                   MDB_NOOVERWRITE | MDB_APPEND);
 
-    /* Initialize key = email */
-    void_store_init(1, &ops[1].key_store);
-    void_store_add(ops[1].key_store, (void*)email, (size_t)*email_len);
+    /* --- op 1 : email2id --- */
+    op = &ops[1];
+    if(void_store_init(1, &op->key_store) != 0)
+    {
+        fprintf(stderr, "void_store_init failed\n");
+        ops_free(&ops, (uint8_t*)&(uint8_t){2});
+        return -ENOMEM;
+    }
+    void_store_add(op->key_store, (void*)email, (size_t)*email_len);
 
-    /* Initialize val = id */
-    void_store_init(1, &ops[1].val_store);
-    void_store_add(ops[1].val_store, (void*)user_id, DB_UUID_SIZE);
+    if(void_store_init(1, &op->val_store) != 0)
+    {
+        fprintf(stderr, "void_store_init failed\n");
+        ops_free(&ops, (uint8_t*)&(uint8_t){2});
+        return -ENOMEM;
+    }
+    void_store_add(op->val_store, (void*)user_id, DB_UUID_SIZE);
 
-    /* DBI id2pwd */
+    ops_prepare_op(op, DB_OPERATION_PUT, DB->db_user_mail2id, MDB_NOOVERWRITE);
 
+    /* --- op 2 : id2pwd --- */
+    op = &ops[2];
+    if(void_store_init(1, &op->key_store) != 0)
+    {
+        fprintf(stderr, "void_store_init failed\n");
+        ops_free(&ops, (uint8_t*)&(uint8_t){3});
+        return -ENOMEM;
+    }
+    void_store_add(op->key_store, (void*)user_id, DB_UUID_SIZE);
+
+    if(void_store_init(1, &op->val_store) != 0)
+    {
+        fprintf(stderr, "void_store_init failed\n");
+        ops_free(&ops, (uint8_t*)&(uint8_t){3});
+        return -ENOMEM;
+    }
+    void_store_add(op->val_store, (void*)pwd_hash, strnlen(pwd_hash, DB_PWD_MAX_HASH_SIZE) + 1 /* strnlen(pwd_hash, DB_PWD_MAX_HASH_SIZE) */);
+
+    ops_prepare_op(&ops[2], DB_OPERATION_PUT, DB->db_user_id2pwd,
+                   MDB_NOOVERWRITE | MDB_APPEND);
+
+    /* link + return */
+    ops_link(ops, N_OPERATIONS);
     *n_ops      = N_OPERATIONS;
     *operations = ops;
+
     return 0;
 }
 
-int db_user_register_new(uint8_t* email_len, char* email, uint8_t* user_id
-                         /*, const void *pwrec, size_t pwrec_sz*/)
+int db_user_register_new(uint8_t* email_len, char* email, uint8_t* user_id,
+                         char* pwd_hash)
 {
-    if(!email || !user_id /* || !pwrec*/) return -EINVAL;
+    if(!email || !user_id || !pwd_hash) return -EINVAL;
 
     /* Prepare the operations data */
     DB_operation_t* ops   = NULL;
@@ -163,11 +194,15 @@ int db_user_register_new(uint8_t* email_len, char* email, uint8_t* user_id
     fprintf(stdout, "[db_user] registering new client: email %s, elen %u\n",
             email, *email_len);
     /* create operations to add user */
-    int ret = user_register_new_ops(&ops, &n_ops, email_len, email, user_id
-                                    /*, const void *pwrec, size_t pwrec_sz*/);
-    if(ret != 0) return ret;
+    int ret = user_register_new_ops(&ops, &n_ops, email_len, email, user_id,
+                                    pwd_hash);
+    if(ret != 0) return db_map_mdb_err(ret);
 
-    ret = exec_ops(ops, &n_ops);
+    ret = ops_exec(ops, &n_ops);
+    if(ret != 0) return db_map_mdb_err(ret);
+
+    /* free operations */
+    ops_free(&ops, &n_ops);
 
     return db_map_mdb_err(ret);
 }

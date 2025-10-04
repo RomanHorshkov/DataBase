@@ -1,5 +1,6 @@
 // void_store.c
 #include "void_store.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -80,6 +81,39 @@ int void_store_add(void_store_t* st, void* elem, size_t elem_size)
 void* void_store_get(const void_store_t* st, size_t idx)
 {
     return st->elements[idx];
+}
+
+void* void_store_malloc_buf(void_store_t* st)
+{
+    if(!st)
+    {
+        fprintf(stderr, "[void_store_malloc_buf] invalid input\n");
+        return NULL;
+    }
+
+    size_t len = void_store_size(st);
+    if(!len)
+    {
+        fprintf(stderr, "[void_store_malloc_buf] empty store\n");
+        return NULL;
+    }
+
+    void* buf = malloc(len);
+
+    if(!buf)
+    {
+        fprintf(stderr, "[void_store_malloc_buf] malloc failed\n");
+        return NULL;
+    }
+
+    if(void_store_memcpy(buf, len, st) != len)
+    {
+        fprintf(stderr, "[void_store_malloc_buf] memcpy failed\n");
+        free(buf);
+        return NULL;
+    }
+
+    return buf;
 }
 
 size_t void_store_size(const void_store_t* st)

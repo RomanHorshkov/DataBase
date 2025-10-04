@@ -18,6 +18,8 @@
 /* Logical names of LMDB sub-databases */
 #define DB_USER_ID2META "user_id2meta" /* key = id(16),  val = UserPacked */
 #define DB_USER_MAIL2ID "user_mail2id" /* key = email,   val = id(16) */
+#define DB_USER_ID2PWD  "user_id2pwd"  /* key = id(16),   val = pwd(128) */
+
 #define DB_DATA_ID2META "data_id2meta" /* key = id(16),  val = DataMeta */
 #define DB_DATA_SHA2ID  "data_sha2id"  /* key = sha(32), val = id(16) */
 
@@ -92,12 +94,18 @@ int db_open(const char* root_dir, size_t mapsize_bytes)
     MDB_txn* txn = NULL;
     if(mdb_txn_begin(DB->env, NULL, 0, &txn) != MDB_SUCCESS) goto fail_env;
 
+    /* user */
     if(mdb_dbi_open(txn, DB_USER_ID2META, MDB_CREATE, &DB->db_user_id2meta) !=
        MDB_SUCCESS)
         goto fail;
     if(mdb_dbi_open(txn, DB_USER_MAIL2ID, MDB_CREATE, &DB->db_user_mail2id) !=
        MDB_SUCCESS)
         goto fail;
+    if(mdb_dbi_open(txn, DB_USER_ID2PWD, MDB_CREATE, &DB->db_user_id2pwd) !=
+       MDB_SUCCESS)
+        goto fail;
+
+    /* data */
     if(mdb_dbi_open(txn, DB_DATA_ID2META, MDB_CREATE, &DB->db_data_id2meta) !=
        MDB_SUCCESS)
         goto fail;
